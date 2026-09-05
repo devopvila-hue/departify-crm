@@ -16,6 +16,29 @@ services:
       timeout: 3s
       retries: 10
 
+  # The single API image serves the SPA out of apps/web/dist/ at the
+  # same origin. One port, one process, one healthcheck.
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      APP_BASE_URL: http://localhost:4000
+      WEB_ORIGIN: http://localhost:4000
+      DATABASE_URL: postgres://postgres:postgres@db:5432/departify_crm
+      SESSION_SECRET: ${SESSION_SECRET:-please-replace-me-with-32-bytes-of-random}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-replace-me-with-32-bytes-of-random}
+      LOG_LEVEL: info
+    ports:
+      - "4000:4000"
+    depends_on:
+      db: { condition: service_healthy }
+
+  # One-shot helper: run migrations against the DB then exit.
   migrate:
     build:
       context: .
@@ -27,6 +50,7 @@ services:
       db: { condition: service_healthy }
     profiles: ["migrate"]
 
+  # One-shot helper: seed the demo org then exit.
   seed:
     build:
       context: .
@@ -37,34 +61,6 @@ services:
     depends_on:
       db: { condition: service_healthy }
     profiles: ["seed"]
-
-  api:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgres://postgres:postgres@db:5432/departify_crm
-      SESSION_SECRET: ${SESSION_SECRET:-please-replace-me-with-32-bytes-of-random}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-replace-me-with-32-bytes-of-random}
-      PORT: 4000
-      APP_BASE_URL: http://localhost:4000
-      WEB_ORIGIN: http://localhost:8080
-    ports:
-      - "4000:4000"
-    depends_on:
-      db: { condition: service_healthy }
-
-  web:
-    build:
-      context: .
-      dockerfile: docker/web.Dockerfile
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    depends_on:
-      - api
 
 volumes:
   dbdata:

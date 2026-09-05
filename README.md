@@ -12,15 +12,14 @@ contacts, companies, pipelines and deals, schedules outreach, sends
 email through pluggable providers, and exposes a stable API that
 DEPARTIFY can drive.
 
-## Deploy (production) — Vercel + Railway + Supabase
+## Deploy (production) — Railway + Supabase
 
-The CRM is split across three providers, each doing one job well:
+The CRM runs as **one container** that serves both the API and the SPA. Two providers, not three:
 
-- **Frontend (apps/web)** → **Vercel**. Static SPA, auto-deploys on push to `main`.
-- **API (apps/api)** → **Railway**. Docker container running Fastify, auto-deploys on push to `main`.
+- **API + SPA together** → **Railway**. One Docker container, one domain, no CORS, native cookies. Auto-deploys on push to `main`.
 - **Postgres** → **Supabase**. Managed Postgres (free tier). The CRM only uses the SQL engine — no Supabase Auth, no Supabase Storage, no Realtime. Connection string is plain Postgres, so the DB is portable to Railway Postgres or self-hosted if needed.
 
-This mirrors the `devopvila-hue/departify-brand-manual` flow: GitHub is the source of truth, each provider auto-deploys from it.
+This mirrors the `devopvila-hue/departify-brand-manual` flow: GitHub is the source of truth, Railway auto-deploys from it.
 
 ### One-time setup
 
@@ -34,19 +33,18 @@ This mirrors the `devopvila-hue/departify-brand-manual` flow: GitHub is the sour
    - **Settings → Build → Builder**: switch from `Nixpacks` to `Dockerfile`.
    - **Dockerfile path**: `docker/api.Dockerfile`.
    - **Build context**: `.` (repo root).
-   - Set the env vars below. The first deploy will build the API. `DATABASE_URL` should point at the Supabase project so you only pay for one DB.
-4. **Vercel** — "Add New Project" → import `devopvila-hue/departify-crm`. Set **Root Directory** to `apps/web` and the **Build Command** to `pnpm build` (it'll fall through to the workspace `build` script). Vercel builds the SPA natively — no Dockerfile needed. Set the env vars below. Auto-deploy on push is on by default.
+   - **Healthcheck Path**: `/health`.
+   - Set the env vars below. The first deploy will build the API + SPA in one image. `DATABASE_URL` should point at the Supabase project so you only pay for one DB.
 
-### Env vars per service
+### Env vars (Railway, single set)
 
-**Railway (api):**
 ```
 NODE_ENV=production
 PORT=4000
 HOST=0.0.0.0
-APP_BASE_URL=https://api.<your-railway-domain>.up.railway.app
-WEB_ORIGIN=https://<your-vercel-app>.vercel.app
-DATABASE_URL=<supabase direct connection string>
+APP_BASE_URL=${{RAILWAY_PUBLIC_DOMAIN}}
+WEB_ORIGIN=${{RAILWAY_PUBLIC_DOMAIN}}
+DATABASE_URL=postgresql://postgres:<PASSWORD>@db.<REF>.supabase.co:5432/postgres
 SESSION_SECRET=<openssl rand -base64 32>
 ENCRYPTION_KEY=<openssl rand -base64 32>
 LOG_LEVEL=info
@@ -56,21 +54,15 @@ RATE_LIMIT_AUTH_MAX=10
 RATE_LIMIT_AUTH_WINDOW=1 minute
 ```
 
-**Vercel (web):**
-```
-# Vite reads VITE_*-prefixed vars at build time. The frontend
-# talks to the API via the Railway URL.
-VITE_API_BASE_URL=https://api.<your-railway-domain>.up.railway.app/api
-```
+`APP_BASE_URL` and `WEB_ORIGIN` use Railway's `${{RAILWAY_PUBLIC_DOMAIN}}` template, so the API always knows its own public URL. No CORS or cookie pain because everything is same-origin.
 
 ### One-time bootstrap after first deploy
 
 ```bash
-# 1. Apply migrations against the Supabase DB.
-# Run from your machine with the same DATABASE_URL Railway uses:
+# Apply migrations against the Supabase DB.
 DATABASE_URL=<supabase url> pnpm --filter=@departify-crm/db migrate
 
-# 2. Seed the demo organization.
+# Seed the demo organization (optional, only for trying it out).
 DATABASE_URL=<supabase url> pnpm --filter=@departify-crm/db seed
 # Demo login: demo@departify.app / departify-demo-2026
 ```

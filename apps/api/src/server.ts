@@ -21,6 +21,7 @@ import { searchRoutes } from './modules/search/routes.js';
 import { serviceKeyRoutes } from './modules/service-keys/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { buildOpenAPI } from './openapi/index.js';
+import { mountSpa, locateWebDist } from './static/spa.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -72,6 +73,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     await v1.register(searchRoutes, { prefix: '/api/v1' });
     await v1.register(serviceKeyRoutes, { prefix: '/api/v1' });
   });
+
+  // --- SPA ------------------------------------------------------------
+  // Same-origin: serve the built SPA from apps/web/dist/. The SPA talks
+  // to the API at relative /api/v1/... so no build-time base URL is
+  // required and cookies work without SameSite=None.
+  mountSpa(app, locateWebDist());
 
   return app;
 }
