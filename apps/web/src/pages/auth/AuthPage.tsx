@@ -32,13 +32,13 @@ export function LoginPage() {
     <div className="min-h-dvh grid place-items-center bg-ink-50 px-4">
       <div className="w-full max-w-sm card-pop p-6 animate-fade-in">
         <div className="flex items-center gap-2 mb-5">
-          <div
-            className="size-8 rounded-md grid place-items-center text-white text-[14px] font-bold"
-            style={{ background: 'linear-gradient(135deg,#9EC84B 0%,#5F8722 100%)' }}
-            aria-hidden
-          >
-            D
-          </div>
+          <img
+            src="/brand/departify-d-symbol.png"
+            alt="DEPARTIFY"
+            width={32}
+            height={32}
+            className="size-8 rounded-md"
+          />
           <p className="font-semibold text-ink-900">DEPARTIFY CRM</p>
         </div>
         <h1 className="text-xl font-semibold text-ink-900">Inicia sesión</h1>
@@ -88,13 +88,13 @@ export function SignupPage() {
     <div className="min-h-dvh grid place-items-center bg-ink-50 px-4">
       <div className="w-full max-w-sm card-pop p-6 animate-fade-in">
         <div className="flex items-center gap-2 mb-5">
-          <div
-            className="size-8 rounded-md grid place-items-center text-white text-[14px] font-bold"
-            style={{ background: 'linear-gradient(135deg,#9EC84B 0%,#5F8722 100%)' }}
-            aria-hidden
-          >
-            D
-          </div>
+          <img
+            src="/brand/departify-d-symbol.png"
+            alt="DEPARTIFY"
+            width={32}
+            height={32}
+            className="size-8 rounded-md"
+          />
           <p className="font-semibold text-ink-900">DEPARTIFY CRM</p>
         </div>
         <h1 className="text-xl font-semibold text-ink-900">Crea tu espacio</h1>

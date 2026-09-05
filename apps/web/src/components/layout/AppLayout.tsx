@@ -73,13 +73,13 @@ export function AppLayout() {
     <div className="min-h-dvh grid grid-cols-[240px_1fr] bg-ink-50">
       <aside className="bg-white border-r border-ink-200 flex flex-col">
         <div className="px-5 py-5 flex items-center gap-2.5">
-          <div
-            className="size-8 rounded-md grid place-items-center text-white text-[14px] font-bold"
-            style={{ background: 'linear-gradient(135deg,#9EC84B 0%,#5F8722 100%)' }}
-            aria-hidden
-          >
-            D
-          </div>
+          <img
+            src="/brand/departify-d-symbol.png"
+            alt="DEPARTIFY"
+            width={32}
+            height={32}
+            className="size-8 rounded-md"
+          />
           <div className="leading-tight">
             <p className="text-[15px] font-semibold text-ink-900">DEPARTIFY</p>
             <p className="text-[11px] text-ink-500">CRM operativo</p>
