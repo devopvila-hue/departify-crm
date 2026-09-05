@@ -30,8 +30,12 @@ This mirrors the `devopvila-hue/departify-brand-manual` flow: GitHub is the sour
    postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
    ```
    This is the `DATABASE_URL` for both the API and the migrations. Use the **direct** connection (port 5432), not the pooler, so Drizzle migrations work.
-3. **Railway** — create a new project → "Deploy from GitHub repo" → `devopvila-hue/departify-crm`. Set the **root directory** to `docker/`. Override the Dockerfile path if needed; the relevant one is `docker/api.Dockerfile`. Set the env vars below. The first deploy will build the API and the worker. Add a Postgres volume or — recommended — point `DATABASE_URL` at the Supabase project so you only pay for one DB.
-4. **Vercel** — "Add New Project" → import `devopvila-hue/departify-crm`. Set **Root Directory** to `apps/web` and the **Build Command** to `pnpm build` (it'll fall through to the workspace `build` script which compiles the API too — Vercel just needs the resulting `apps/web/dist`). Set the env vars below. Auto-deploy on push is on by default.
+3. **Railway** — create a new project → "Deploy from GitHub repo" → `devopvila-hue/departify-crm`. In the service settings:
+   - **Settings → Build → Builder**: switch from `Nixpacks` to `Dockerfile`.
+   - **Dockerfile path**: `docker/api.Dockerfile`.
+   - **Build context**: `.` (repo root).
+   - Set the env vars below. The first deploy will build the API. `DATABASE_URL` should point at the Supabase project so you only pay for one DB.
+4. **Vercel** — "Add New Project" → import `devopvila-hue/departify-crm`. Set **Root Directory** to `apps/web` and the **Build Command** to `pnpm build` (it'll fall through to the workspace `build` script). Vercel builds the SPA natively — no Dockerfile needed. Set the env vars below. Auto-deploy on push is on by default.
 
 ### Env vars per service
 
