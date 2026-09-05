@@ -40,6 +40,11 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 FROM node:22-alpine AS builder
 WORKDIR /repo
 RUN corepack enable
+# Touch a buildinfo file to bust the builder cache when only files
+# inside apps/web/public change (the COPY below would otherwise reuse
+# a stale layer from the previous build).
+ARG BUILDKIT_CACHE_BUST=1
+RUN echo "build ${BUILDKIT_CACHE_BUST}" > /tmp/buildinfo
 COPY --from=deps /repo ./
 COPY tsconfig.base.json ./
 COPY packages packages
