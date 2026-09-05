@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  /* Use the slightly more humanist Italic of Instrument Sans for
+     small annotations, never for the body. */
+  ::selection {
+    background: theme('colors.lime.200');
+    color: theme('colors.ink.900');
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.lime.500');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Tabular numbers for data tables and money. */
+  .num, .money, td.num, td.money, .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-md border border-ink-200 bg-white shadow-card;
+  }
+  .card-pop {
+    @apply rounded-md border border-ink-200 bg-white shadow-pop;
+  }
+  .input {
+    @apply h-9 w-full rounded-md border border-ink-200 bg-white px-3 text-sm placeholder:text-ink-400
+           focus:border-ink-400 focus:shadow-ring focus:outline-none;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 h-9 text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-900;
+  }
+  .btn-accent {
+    @apply btn bg-lime-500 text-ink-900 hover:bg-lime-400;
+  }
+  .btn-ghost {
+    @apply btn text-ink-700 hover:bg-ink-100;
+  }
+  .btn-outline {
+    @apply btn border border-ink-200 text-ink-800 hover:bg-ink-50;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-ink-200 bg-ink-50 px-2 py-[2px]
+           text-[11px] font-medium uppercase tracking-wide text-ink-600;
+  }
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead th {
+    @apply text-left text-[11px] uppercase tracking-wide font-medium text-ink-500 px-3 py-2 border-b border-ink-200;
+  }
+  .data-table tbody td {
+    @apply px-3 py-2 border-b border-ink-100;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-ink-50;
+  }
+}
