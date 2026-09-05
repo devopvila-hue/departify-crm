@@ -1,0 +1,53 @@
+# Anything that should never reach the Docker build context.
+# Keeps the context small AND prevents local artifacts (node_modules,
+# dist/, .git/) from accidentally shadowing what's in the repo.
+#
+# Important: do NOT add `docker/` here. The Dockerfile we build with
+# lives at docker/api.Dockerfile and must be reachable inside the
+# build context.
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Dependencies (re-installed inside the image)
+**/node_modules
+**/.pnpm-store
+.pnpm-store
+
+# Build outputs (re-built inside the image)
+**/dist
+**/build
+**/.turbo
+**/.drizzle-bundle
+**/.next
+**/.cache
+
+# Test output
+coverage
+.nyc_output
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Env / secrets — must never reach the image
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+pnpm-debug.log*
+npm-debug.log*
+
+# TypeScript build info (machine-specific, regenerated)
+**/*.tsbuildinfo
+
+# CI / docs not needed at runtime
+.github
+docs
+*.md

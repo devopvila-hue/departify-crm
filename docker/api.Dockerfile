@@ -23,12 +23,18 @@
 FROM node:22-alpine AS deps
 WORKDIR /repo
 RUN corepack enable
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json    packages/db/
 COPY apps/api/package.json       apps/api/
 COPY apps/web/package.json       apps/web/
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts is required because pnpm 11 refuses to run install
+# scripts (e.g. argon2's node-gyp build) without an interactive
+# approval. The packages we depend on ship their prebuilt binaries
+# inside the npm tarball — argon2 has a linux-musl.x64 prebuild and
+# esbuild has its binary in the tarball — so no post-install step is
+# actually needed at runtime.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ─── builder ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
@@ -39,10 +45,10 @@ COPY tsconfig.base.json ./
 COPY packages packages
 COPY apps/api    apps/api
 COPY apps/web    apps/web
-RUN pnpm --filter=@departify-crm/db     build
-RUN pnpm --filter=@departify-crm/shared build
-RUN pnpm --filter=@departify-crm/api    build
-RUN pnpm --filter=@departify-crm/web    build
+RUN pnpm --filter=@departify-crm/shared build \
+ && pnpm --filter=@departify-crm/db     build \
+ && pnpm --filter=@departify-crm/api    build \
+ && pnpm --filter=@departify-crm/web    build
 
 # ─── runner ────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
