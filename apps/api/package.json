@@ -14,13 +14,16 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@departify-crm/db": "workspace:*",
+    "@departify-crm/llm": "workspace:*",
     "@departify-crm/shared": "workspace:*",
     "@fastify/cookie": "^11.0.1",
     "@fastify/cors": "^10.0.1",
     "@fastify/helmet": "^13.0.0",
     "@fastify/rate-limit": "^10.2.1",
     "@fastify/sensible": "^6.0.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "argon2": "^0.41.1",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.3",

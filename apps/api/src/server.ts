@@ -23,6 +23,8 @@ import { healthRoutes } from './modules/health/routes.js';
 import { buildOpenAPI } from './openapi/index.js';
 import { mountSpa, locateWebDist } from './static/spa.js';
 import { senderRoutes, templateRoutes, sequenceRoutes, suppressionRoutes, publicUnsubscribeRoutes, webhookRoutes } from './modules/email/routes.js';
+import { llmRoutes } from './modules/llm/routes.js';
+import { mcpRoutes } from './mcp/routes.js';
 import { runWorker, stopWorker } from './email/worker.js';
 import { config as appConfig } from './config.js';
 
@@ -104,6 +106,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     await v1.register(sequenceRoutes, { prefix: '/api/v1' });
     await v1.register(suppressionRoutes, { prefix: '/api/v1' });
   });
+
+  // --- LLM (Sprint 6) ------------------------------------------------
+  await app.register(async (v1) => {
+    await v1.register(llmRoutes, { prefix: '/api/v1' });
+  });
+
+  // --- MCP server (Sprint 6) — Streamable HTTP at /mcp -----------------
+  // Public, but every request must carry a valid API key bearer token.
+  await app.register(mcpRoutes);
   // Public routes (no auth).
   await app.register(async (v1) => {
     await v1.register(publicUnsubscribeRoutes, { prefix: '/api/v1' });

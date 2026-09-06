@@ -18,6 +18,13 @@ const schema = z.object({
   // Sprint 5: email / sequence worker
   UNSUB_SECRET: z.string().min(16).default('dev-unsub-secret-rotate-in-prod-please'),
   PUBLIC_HOSTNAME: z.string().default('localhost:4000'),
+  // Sprint 6: LLM client (Anthropic-compatible — works with MiniMax via base URL)
+  LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
+  LLM_API_KEY: z.string().optional(),
+  LLM_BASE_URL: z.string().url().optional(),
+  LLM_MODEL: z.string().default('MiniMax-M3'),
+  LLM_TIMEOUT_MS: z.coerce.number().int().default(60_000),
+  LLM_MAX_RETRIES: z.coerce.number().int().default(2),
 });
 
 const parsed = schema.safeParse(process.env);
