@@ -15,6 +15,13 @@
       "when": 1788695327038,
       "tag": "0001_futuristic_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788724627157,
+      "tag": "0002_open_wonder_man",
+      "breakpoints": true
     }
   ]
 }

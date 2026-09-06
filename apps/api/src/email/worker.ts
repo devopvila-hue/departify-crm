@@ -247,6 +247,13 @@ async function processOne(
     const htmlWithUnsub = injectUnsubscribe(rendered.html ?? '', unsubUrl);
     const textWithUnsub = `${rendered.text}\n\n— Cancelar suscripción: ${unsubUrl}`;
 
+    // Inject open/click tracking on the HTML body. The text body
+    // can't carry a pixel; we leave it as-is. messageId is generated
+    // after the provider is built because we want a stable id that
+    // both the tracking endpoints and the message_event row share.
+    // (See below.)
+    const messageId = generateId('msg');
+
     // Build the provider and send. For the 'fake' provider, we use
     // the credentials that the sender was created with. Real
     // providers need a decrypted API key.
@@ -256,14 +263,17 @@ async function processOne(
       apiKey = creds.apiKey;
     }
     const provider = makeProvider(sender.provider, { apiKey });
-    const messageId = generateId('msg');
+    // Inject open/click tracking right before sending. messageId is
+    // stable across this call so the tracking pixel and the recorded
+    // message_event both refer to the same id.
+    const trackedHtml = injectTracking(htmlWithUnsub, messageId);
     const result = await provider.send({
       from: { name: sender.name, email: sender.email },
       to: [{ email: contact.email! }],
       replyTo: sender.replyTo ? { email: sender.replyTo } : undefined,
       subject: rendered.subject,
       text: textWithUnsub,
-      html: htmlWithUnsub || undefined,
+      html: trackedHtml || undefined,
       clientReferenceId: `${row.enrollment_id}:${row.current_step}:${messageId}`,
       headers: {
         'List-Unsubscribe': `<${unsubUrl}>`,
@@ -344,6 +354,7 @@ function computeBackoff(step: number): number {
 // ─── unsubscribe token signing (uses the shared module) ────────────────
 
 import { signUnsubToken } from './unsubToken.js';
+import { injectTracking } from '../modules/email/tracking.js';
 
 function injectUnsubscribe(html: string, url: string): string {
   // The simplest thing that always renders: a footer link. If the

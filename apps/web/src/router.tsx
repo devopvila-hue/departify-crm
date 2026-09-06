@@ -17,6 +17,7 @@ import { TemplatesPage } from './pages/email/TemplatesPage';
 import { SequencesPage } from './pages/email/SequencesPage';
 import { EnrollmentsPage } from './pages/email/EnrollmentsPage';
 import { SuppressionsPage } from './pages/email/SuppressionsPage';
+import { AIAssistantPage } from './pages/email/AIAssistantPage';
 import type { ReactNode } from 'react';
 
 function Protected({ children }: { children: ReactNode }) {
@@ -60,6 +61,7 @@ const router = createBrowserRouter([
       { path: 'email/sequences', element: <SequencesPage /> },
       { path: 'email/sequences/:id', element: <EnrollmentsPage /> },
       { path: 'email/suppressions', element: <SuppressionsPage /> },
+      { path: 'email/ai', element: <AIAssistantPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

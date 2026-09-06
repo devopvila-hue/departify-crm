@@ -35,12 +35,15 @@ beforeAll(async () => {
   // Apply migrations from the db package.
   const fs = await import('node:fs');
   const path = await import('node:path');
-  const migrationFile = path.resolve(__dirname, '..', '..', '..', 'packages', 'db', 'migrations', '0000_military_dust.sql');
-  if (fs.existsSync(migrationFile)) {
-    const sqlText = fs.readFileSync(migrationFile, 'utf8');
-    const statements = sqlText.split(/-->\s*statement-breakpoint/).map((s) => s.trim()).filter(Boolean);
-    for (const stmt of statements) {
-      try { await db.execute(sql.raw(stmt)); } catch (e) { /* ignore IF NOT EXISTS races */ }
+  const migrationsDir = path.resolve(__dirname, '..', '..', '..', 'packages', 'db', 'migrations');
+  if (fs.existsSync(migrationsDir)) {
+    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+    for (const f of files) {
+      const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
+      const statements = sqlText.split(/-->\s*statement-breakpoint/).map((s) => s.trim()).filter(Boolean);
+      for (const stmt of statements) {
+        try { await db.execute(sql.raw(stmt)); } catch (e) { /* ignore IF NOT EXISTS races */ }
+      }
     }
   }
   serverHandle = spawn('node', ['--import', 'tsx', 'src/index.ts'], {

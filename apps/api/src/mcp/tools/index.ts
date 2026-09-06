@@ -13,6 +13,7 @@ import {
   registerMessageEventTools,
   registerActivityTools,
 } from './sequences.js';
+import { registerAiTools } from './ai.js';
 import type { Database } from '@departify-crm/db';
 import type { McpOrgContext } from '../auth.js';
 
@@ -29,4 +30,5 @@ export function registerAllTools(server: McpServer, ctx: { db: Database; org: Mc
   registerSuppressionTools(server, ctx);
   registerMessageEventTools(server, ctx);
   registerActivityTools(server, ctx);
+  registerAiTools(server, ctx);
 }

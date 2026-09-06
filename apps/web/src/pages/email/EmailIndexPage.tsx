@@ -5,6 +5,7 @@ const items = [
   { to: '/email/templates', label: 'Plantillas', desc: 'Plantillas con variables {{first_name}}.' },
   { to: '/email/sequences', label: 'Secuencias', desc: 'Builder con EMAIL / WAIT / CONDITIONAL / EXIT.' },
   { to: '/email/suppressions', label: 'Supresiones', desc: 'Lista de no-enviar (bounces, unsubscribes, manual).' },
+  { to: '/email/ai', label: 'AI Assistant', desc: 'Enriquecer, lead score, redactor de respuestas, radar de riesgos.' },
 ] as const;
 
 export function EmailIndexPage() {

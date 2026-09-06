@@ -23,8 +23,11 @@ import { healthRoutes } from './modules/health/routes.js';
 import { buildOpenAPI } from './openapi/index.js';
 import { mountSpa, locateWebDist } from './static/spa.js';
 import { senderRoutes, templateRoutes, sequenceRoutes, suppressionRoutes, publicUnsubscribeRoutes, webhookRoutes } from './modules/email/routes.js';
+import { trackingRoutes } from './modules/email/trackingRoutes.js';
+import { publicCardRoutes, publicCardVCardRoute } from './modules/public-card/routes.js';
 import { llmRoutes } from './modules/llm/routes.js';
 import { mcpRoutes } from './mcp/routes.js';
+import { aiRoutes } from './ai/routes.js';
 import { runWorker, stopWorker } from './email/worker.js';
 import { config as appConfig } from './config.js';
 
@@ -110,6 +113,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // --- LLM (Sprint 6) ------------------------------------------------
   await app.register(async (v1) => {
     await v1.register(llmRoutes, { prefix: '/api/v1' });
+    await v1.register(aiRoutes, { prefix: '/api/v1' });
   });
 
   // --- MCP server (Sprint 6) — Streamable HTTP at /mcp -----------------
@@ -119,7 +123,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(async (v1) => {
     await v1.register(publicUnsubscribeRoutes, { prefix: '/api/v1' });
     await v1.register(webhookRoutes, { prefix: '/api/v1' });
+    await v1.register(trackingRoutes, { prefix: '/api/v1' });
   });
+
+  // --- Public contact card (no auth) --------------------------------
+  // Mounted at root (not /api/v1) so the URL stays short: /c/:slug
+  // and /c/:slug.vcf
+  await app.register(publicCardRoutes);
+  await app.register(publicCardVCardRoute);
 
   // --- SPA ------------------------------------------------------------
   // Same-origin: serve the built SPA from apps/web/dist/. The SPA talks

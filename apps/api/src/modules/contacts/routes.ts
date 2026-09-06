@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
-import { schema } from '@departify-crm/db';
+import { schema, createDb } from '@departify-crm/db';
 import { generateId, Prefixes, PaginationQuery, paginate, FilterBody } from '@departify-crm/shared';
 import { compileFilter } from '../../lib/filter.js';
 import { badRequest, notFound } from '../../errors.js';
 import { requireRole } from '../../tenants/plugin.js';
 import { audit } from '../../audit/log.js';
 import { recordActivity } from '../../activities/log.js';
+import { config } from '../../config.js';
 
 const ContactCreate = z.object({
   firstName: z.string().max(120).optional(),
@@ -195,6 +196,30 @@ export async function contactRoutes(app: FastifyInstance) {
     if (!res.length) throw notFound('Contact not found');
     await audit(tenant.db, tenant, { action: 'delete', resourceType: 'contact', resourceId: id });
     return reply.status(204).send();
+  });
+
+  // POST /contacts/:id/public-card — enable/disable the shareable
+  // /c/:slug card. The slug is auto-generated from the contact id
+  // plus a short random suffix, so it's stable but unguessable.
+  app.post('/contacts/:id/public-card', { preHandler: [requireRole('member')] }, async (req) => {
+    const tenant = req.tenant!;
+    const id = z.string().parse((req.params as { id: string }).id);
+    const body = z.object({ enabled: z.boolean() }).parse(req.body ?? {});
+    const db = createDb(config.DATABASE_URL);
+    if (!body.enabled) {
+      await db
+        .update(schema.contacts)
+        .set({ publicSlug: null })
+        .where(and(eq(schema.contacts.organizationId, tenant.organizationId), eq(schema.contacts.id, id)));
+      return { enabled: false, slug: null, url: null };
+    }
+    const slug = `${id.replace(/^con_/, '').toLowerCase()}-${Math.random().toString(36).slice(2, 6)}`;
+    await db
+      .update(schema.contacts)
+      .set({ publicSlug: slug })
+      .where(and(eq(schema.contacts.organizationId, tenant.organizationId), eq(schema.contacts.id, id)));
+    const host = config.PUBLIC_HOSTNAME.startsWith('http') ? config.PUBLIC_HOSTNAME : `https://${config.PUBLIC_HOSTNAME}`;
+    return { enabled: true, slug, url: `${host}/c/${slug}` };
   });
 
   app.get('/contacts/:id/timeline', async (req) => {
