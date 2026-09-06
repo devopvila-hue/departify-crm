@@ -26,6 +26,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json    packages/db/
+COPY packages/llm/package.json    packages/llm/
 COPY apps/api/package.json       apps/api/
 COPY apps/web/package.json       apps/web/
 # --ignore-scripts is required because pnpm 11 refuses to run install
@@ -43,7 +44,7 @@ RUN corepack enable
 # Touch a buildinfo file to bust the builder cache when only files
 # inside apps/web/public change (the COPY below would otherwise reuse
 # a stale layer from the previous build).
-ARG BUILDKIT_CACHE_BUST=1
+ARG BUILDKIT_CACHE_BUST=2
 RUN echo "build ${BUILDKIT_CACHE_BUST}" > /tmp/buildinfo
 COPY --from=deps /repo ./
 COPY tsconfig.base.json ./
@@ -52,6 +53,7 @@ COPY apps/api    apps/api
 COPY apps/web    apps/web
 RUN pnpm --filter=@departify-crm/shared build \
  && pnpm --filter=@departify-crm/db     build \
+ && pnpm --filter=@departify-crm/llm     build \
  && pnpm --filter=@departify-crm/api    build \
  && pnpm --filter=@departify-crm/web    build
 
@@ -76,6 +78,8 @@ COPY --from=builder --chown=app:app /repo/packages/db/dist              /repo/pa
 COPY --from=builder --chown=app:app /repo/packages/db/package.json      /repo/packages/db/package.json
 COPY --from=builder --chown=app:app /repo/packages/shared/dist           /repo/packages/shared/dist
 COPY --from=builder --chown=app:app /repo/packages/shared/package.json  /repo/packages/shared/package.json
+COPY --from=builder --chown=app:app /repo/packages/llm/dist             /repo/packages/llm/dist
+COPY --from=builder --chown=app:app /repo/packages/llm/package.json     /repo/packages/llm/package.json
 COPY --from=builder --chown=app:app /repo/apps/api/dist                 /repo/apps/api/dist
 COPY --from=builder --chown=app:app /repo/apps/api/package.json         /repo/apps/api/package.json
 COPY --from=builder --chown=app:app /repo/apps/web/dist                 /repo/apps/web/dist
@@ -83,6 +87,7 @@ COPY --from=builder --chown=app:app /repo/apps/web/dist                 /repo/ap
 COPY --from=builder --chown=app:app /repo/node_modules                  /repo/node_modules
 COPY --from=builder --chown=app:app /repo/packages/db/node_modules      /repo/packages/db/node_modules
 COPY --from=builder --chown=app:app /repo/packages/shared/node_modules  /repo/packages/shared/node_modules
+COPY --from=builder --chown=app:app /repo/packages/llm/node_modules     /repo/packages/llm/node_modules
 COPY --from=builder --chown=app:app /repo/apps/api/node_modules         /repo/apps/api/node_modules
 COPY --from=builder --chown=app:app /repo/apps/web/node_modules         /repo/apps/web/node_modules
 
