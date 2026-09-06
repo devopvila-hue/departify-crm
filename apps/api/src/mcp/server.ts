@@ -9,11 +9,15 @@
  * We use the Node `StreamableHTTPServerTransport` (incoming-message
  * style) so it plugs straight into Fastify's `request.raw` /
  * `reply.raw` without an Hono shim.
+ *
+ * IMPORTANT: the database is shared across sessions. The MCP server
+ * does NOT own the connection — opening one per session quickly
+ * exhausts the Supabase pool and triggers "too many clients".
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
-import { createDb } from '@departify-crm/db';
+import { createDb, type Database } from '@departify-crm/db';
 import { config } from '../config.js';
 import { resolveMcpAuth, type McpOrgContext } from './auth.js';
 import { registerAllTools } from './tools/index.js';
@@ -22,7 +26,14 @@ export interface McpSession {
   server: McpServer;
   transport: StreamableHTTPServerTransport;
   org: McpOrgContext;
-  db: ReturnType<typeof createDb>;
+}
+
+// Lazily-initialised shared DB handle. One pool for the whole
+// process, regardless of how many MCP sessions come and go.
+let sharedDb: Database | null = null;
+function getSharedDb(): Database {
+  if (!sharedDb) sharedDb = createDb(config.DATABASE_URL);
+  return sharedDb;
 }
 
 /** Sessions are kept in memory keyed by their session id. */
@@ -40,7 +51,6 @@ export async function closeMcpSession(sid: string): Promise<void> {
   SESSIONS.delete(sid);
   try { await s.transport.close(); } catch { /* ignore */ }
   try { await s.server.close(); } catch { /* ignore */ }
-  try { await s.db.$client.end?.(); } catch { /* ignore */ }
 }
 
 /**
@@ -50,10 +60,9 @@ export async function closeMcpSession(sid: string): Promise<void> {
  * re-use the same server + transport.
  */
 export async function createMcpSession(authHeader: string | undefined): Promise<McpSession | { status: 401; message: string }> {
-  const db = createDb(config.DATABASE_URL);
+  const db = getSharedDb();
   const org = await resolveMcpAuth(db, authHeader);
   if (!org) {
-    await db.$client.end?.().catch(() => undefined);
     return { status: 401, message: 'invalid or missing API key (Authorization: Bearer <api_key>)' };
   }
 
@@ -80,7 +89,7 @@ export async function createMcpSession(authHeader: string | undefined): Promise<
     // (e.g. Claude Desktop) still work over JSON responses.
     enableJsonResponse: true,
     onsessioninitialized: (sid) => {
-      SESSIONS.set(sid, { server, transport, org, db });
+      SESSIONS.set(sid, { server, transport, org });
     },
     onsessionclosed: (sid) => {
       // Best-effort cleanup. We don't await because the transport
@@ -89,5 +98,5 @@ export async function createMcpSession(authHeader: string | undefined): Promise<
     },
   });
   await server.connect(transport);
-  return { server, transport, org, db };
+  return { server, transport, org };
 }
