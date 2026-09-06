@@ -22,6 +22,9 @@ import { serviceKeyRoutes } from './modules/service-keys/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { buildOpenAPI } from './openapi/index.js';
 import { mountSpa, locateWebDist } from './static/spa.js';
+import { senderRoutes, templateRoutes, sequenceRoutes, suppressionRoutes, publicUnsubscribeRoutes, webhookRoutes } from './modules/email/routes.js';
+import { runWorker, stopWorker } from './email/worker.js';
+import { config as appConfig } from './config.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -40,6 +43,26 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(cookie, { secret: config.SESSION_SECRET });
   await app.register(sensible);
+
+  // Preserve the raw body string for routes that need it (e.g. webhooks
+  // for HMAC signature verification). Routes that need it opt in via
+  // `config: { rawBody: true }`. We store the raw body on the request
+  // object so the route handlers can read it.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      try {
+        const raw = body as string;
+        (req as unknown as { rawBody?: string }).rawBody = raw;
+        const json = raw === '' ? {} : JSON.parse(raw);
+        done(null, json);
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_DEFAULT_MAX,
     timeWindow: config.RATE_LIMIT_DEFAULT_WINDOW,
@@ -74,6 +97,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     await v1.register(serviceKeyRoutes, { prefix: '/api/v1' });
   });
 
+  // --- Email / Sequences (Sprint 5) ----------------------------------
+  await app.register(async (v1) => {
+    await v1.register(senderRoutes, { prefix: '/api/v1' });
+    await v1.register(templateRoutes, { prefix: '/api/v1' });
+    await v1.register(sequenceRoutes, { prefix: '/api/v1' });
+    await v1.register(suppressionRoutes, { prefix: '/api/v1' });
+  });
+  // Public routes (no auth).
+  await app.register(async (v1) => {
+    await v1.register(publicUnsubscribeRoutes, { prefix: '/api/v1' });
+    await v1.register(webhookRoutes, { prefix: '/api/v1' });
+  });
+
   // --- SPA ------------------------------------------------------------
   // Same-origin: serve the built SPA from apps/web/dist/. The SPA talks
   // to the API at relative /api/v1/... so no build-time base URL is
@@ -82,6 +118,21 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   return app;
 }
+
+/**
+ * Start the in-process sequence worker. Returns a stop function.
+ * Called from apps/api/src/index.ts after the API server boots.
+ */
+export function startSequenceWorker(databaseUrl: string): () => void {
+  const promise = runWorker(databaseUrl);
+  return () => {
+    stopWorker();
+    void promise; // keep the promise referenced for lints
+  };
+}
+
+// Suppress unused warning for appConfig import in some build configs.
+void appConfig;
 
 function swaggerHtml(baseUrl: string) {
   return `<!doctype html>

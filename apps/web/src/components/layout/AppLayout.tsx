@@ -10,10 +10,11 @@ const items = [
   { to: '/companies', label: 'Empresas', icon: 'building' },
   { to: '/pipeline', label: 'Pipeline', icon: 'kanban' },
   { to: '/tasks', label: 'Tareas', icon: 'check' },
+  { to: '/email', label: 'Email', icon: 'mail' },
   { to: '/settings/keys', label: 'Integraciones', icon: 'plug' },
 ] as const;
 
-function Icon({ name }: { name: 'home' | 'people' | 'building' | 'kanban' | 'check' | 'plug' }) {
+function Icon({ name }: { name: 'home' | 'people' | 'building' | 'kanban' | 'check' | 'plug' | 'mail' }) {
   switch (name) {
     case 'home':
       return (
@@ -59,6 +60,13 @@ function Icon({ name }: { name: 'home' | 'people' | 'building' | 'kanban' | 'che
           <path d="M9 3v4M15 3v4" />
           <rect x="7" y="7" width="10" height="6" />
           <path d="M12 13v3a4 4 0 01-4 4" />
+        </svg>
+      );
+    case 'mail':
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
         </svg>
       );
   }

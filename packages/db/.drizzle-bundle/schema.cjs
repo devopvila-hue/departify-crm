@@ -3116,6 +3116,9 @@ var emailTemplates = pgTable(
     name: text("name").notNull(),
     subject: text("subject").notNull(),
     body: text("body").notNull(),
+    /** Optional HTML body. If null we wrap the plain-text body in a
+     * minimal HTML shell at send time. */
+    htmlBody: text("html_body"),
     senderId: text("sender_id").references(() => emailSenders.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()

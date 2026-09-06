@@ -15,6 +15,9 @@ const schema = z.object({
   RATE_LIMIT_DEFAULT_WINDOW: z.string().default('1 minute'),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().default(10),
   RATE_LIMIT_AUTH_WINDOW: z.string().default('1 minute'),
+  // Sprint 5: email / sequence worker
+  UNSUB_SECRET: z.string().min(16).default('dev-unsub-secret-rotate-in-prod-please'),
+  PUBLIC_HOSTNAME: z.string().default('localhost:4000'),
 });
 
 const parsed = schema.safeParse(process.env);

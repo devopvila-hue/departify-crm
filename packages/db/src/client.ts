@@ -28,6 +28,4 @@ export function createDb(connectionString: string) {
   return drizzle(client, { schema, logger: false });
 }
 
-export { schema };
-
 

@@ -11,6 +11,12 @@ import { DealDetailPage } from './pages/pipelines/DealDetailPage';
 import { TasksPage } from './pages/tasks/TasksPage';
 import { IntegrationsPage } from './pages/settings/IntegrationsPage';
 import { LoginPage, SignupPage } from './pages/auth/AuthPage';
+import { EmailIndexPage } from './pages/email/EmailIndexPage';
+import { SendersPage } from './pages/email/SendersPage';
+import { TemplatesPage } from './pages/email/TemplatesPage';
+import { SequencesPage } from './pages/email/SequencesPage';
+import { EnrollmentsPage } from './pages/email/EnrollmentsPage';
+import { SuppressionsPage } from './pages/email/SuppressionsPage';
 import type { ReactNode } from 'react';
 
 function Protected({ children }: { children: ReactNode }) {
@@ -47,6 +53,13 @@ const router = createBrowserRouter([
       { path: 'deals/:id', element: <DealDetailPage /> },
       { path: 'tasks', element: <TasksPage /> },
       { path: 'settings/keys', element: <IntegrationsPage /> },
+      // Email / Sequences (Sprint 5)
+      { path: 'email', element: <EmailIndexPage /> },
+      { path: 'email/senders', element: <SendersPage /> },
+      { path: 'email/templates', element: <TemplatesPage /> },
+      { path: 'email/sequences', element: <SequencesPage /> },
+      { path: 'email/sequences/:id', element: <EnrollmentsPage /> },
+      { path: 'email/suppressions', element: <SuppressionsPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

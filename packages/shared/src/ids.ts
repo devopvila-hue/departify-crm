@@ -46,6 +46,13 @@ export const Prefixes = {
   audit: 'aud',
   session: 'ses',
   apiKey: 'ak',
+  // Sprint 5: email automation
+  emailSender: 'snd',
+  emailTemplate: 'tpl',
+  sequence: 'seq',
+  sequenceEnrollment: 'enr',
+  suppression: 'supp',
+  messageEvent: 'mevt',
 } as const;
 
 export type IdPrefix = (typeof Prefixes)[keyof typeof Prefixes];

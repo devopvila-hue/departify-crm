@@ -52,6 +52,9 @@ export const emailTemplates = pgTable(
     name: text('name').notNull(),
     subject: text('subject').notNull(),
     body: text('body').notNull(),
+    /** Optional HTML body. If null we wrap the plain-text body in a
+     * minimal HTML shell at send time. */
+    htmlBody: text('html_body'),
     senderId: text('sender_id').references(() => emailSenders.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -75,7 +78,18 @@ export const sequences = pgTable(
     sendingWindowStart: text('sending_window_start').notNull().default('09:00'),
     sendingWindowEnd: text('sending_window_end').notNull().default('18:00'),
     steps: jsonb('steps')
-      .$type<Array<{ kind: 'email' | 'wait'; templateId?: string; waitDays?: number }>>()
+      .$type<
+        Array<{
+          kind: 'email' | 'wait' | 'conditional' | 'exit';
+          templateId?: string;
+          senderId?: string;
+          waitDays?: number;
+          /** For 'conditional': check the latest event of this contact+sequence. */
+          ifEvent?: 'opened' | 'clicked' | 'replied' | 'bounced';
+          /** For 'conditional': what to do if the condition is met. */
+          thenAction?: 'continue' | 'exit';
+        }>
+      >()
       .notNull()
       .default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
