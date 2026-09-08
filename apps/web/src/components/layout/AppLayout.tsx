@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../design-system/Toast';
 import { initials } from '../../lib/format';
-import clsx from 'clsx';
 
 const items = [
   { to: '/', label: 'Inicio', icon: 'home' },
@@ -14,7 +15,9 @@ const items = [
   { to: '/settings/keys', label: 'Integraciones', icon: 'plug' },
 ] as const;
 
-function Icon({ name }: { name: 'home' | 'people' | 'building' | 'kanban' | 'check' | 'plug' | 'mail' }) {
+type IconName = (typeof items)[number]['icon'];
+
+function Icon({ name }: { name: IconName }) {
   switch (name) {
     case 'home':
       return (
@@ -72,26 +75,116 @@ function Icon({ name }: { name: 'home' | 'people' | 'building' | 'kanban' | 'che
   }
 }
 
+const STORAGE_KEY = 'departify-sidebar-collapsed';
+
+function readCollapsedPref(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsedPref(v: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, v ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
 export function AppLayout() {
   const { me, logout } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  // Drawer state for < lg. ≥ lg the sidebar is persistent; on those screens
+  // this only controls the backdrop overlay which we hide via lg:hidden.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Desktop collapsed state (icon-only sidebar). Persisted to localStorage.
+  const [desktopCollapsed, setDesktopCollapsed] = useState<boolean>(() => readCollapsedPref());
+
+  useEffect(() => {
+    writeCollapsedPref(desktopCollapsed);
+  }, [desktopCollapsed]);
+
+  // Close mobile drawer on Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMobileOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
+
+  // Auto-close mobile drawer on resize to ≥ lg.
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth >= 1024 && mobileOpen) setMobileOpen(false);
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [mobileOpen]);
+
+  const asideWidth = desktopCollapsed ? 'lg:w-[68px]' : 'lg:w-[240px]';
+  const showLabels = !desktopCollapsed;
 
   return (
-    <div className="min-h-dvh grid grid-cols-[240px_1fr] bg-ink-50">
-      <aside className="bg-white border-r border-ink-200 flex flex-col">
-        <div className="px-5 py-5 flex items-center gap-2.5">
+    <div className="min-h-dvh bg-ink-50 lg:grid lg:grid-cols-[1fr] lg:[grid-template-columns:theme(width.68)_1fr] data-[collapsed=false]:lg:[grid-template-columns:theme(width.240)_1fr]">
+      {/* Mobile topbar */}
+      <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-ink-200 px-4 py-2.5 flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Abrir menú"
+          onClick={() => setMobileOpen(true)}
+          className="size-9 grid place-items-center rounded-md hover:bg-ink-100"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+        <img src="/brand/departify-d-symbol.png" alt="" width={28} height={28} className="size-7 rounded-md" />
+        <span className="text-[14px] font-semibold text-ink-900">DEPARTIFY</span>
+      </header>
+
+      {/* Backdrop for mobile drawer */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-ink-900/40"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={clsx(
+          'bg-white border-r border-ink-200 flex flex-col z-50',
+          'transition-transform duration-150',
+          mobileOpen
+            ? 'fixed top-0 left-0 bottom-0 w-[260px] translate-x-0'
+            : 'fixed top-0 left-0 bottom-0 w-[260px] -translate-x-full',
+          'lg:static lg:translate-x-0 lg:flex lg:flex-col',
+          asideWidth,
+        )}
+        aria-label="Navegación principal"
+      >
+        <div className={clsx('px-5 py-5 flex items-center gap-2.5', desktopCollapsed && 'lg:justify-center lg:px-0')}>
           <img
             src="/brand/departify-d-symbol.png"
             alt="DEPARTIFY"
             width={32}
             height={32}
-            className="size-8 rounded-md"
+            className="size-8 rounded-md shrink-0"
           />
-          <div className="leading-tight">
-            <p className="text-[15px] font-semibold text-ink-900">DEPARTIFY</p>
-            <p className="text-[11px] text-ink-500">CRM operativo</p>
-          </div>
+          {showLabels && (
+            <div className="leading-tight">
+              <p className="text-[15px] font-semibold text-ink-900">DEPARTIFY</p>
+              <p className="text-[11px] text-ink-500">CRM operativo</p>
+            </div>
+          )}
         </div>
 
         <nav className="px-3 py-2 flex-1 space-y-0.5">
@@ -100,44 +193,68 @@ export function AppLayout() {
               key={it.to}
               to={it.to}
               end={it.to === '/'}
+              onClick={() => setMobileOpen(false)}
+              title={desktopCollapsed ? it.label : undefined}
               className={({ isActive }) =>
                 clsx(
-                  'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm',
+                  'flex items-center gap-2.5 rounded-md text-sm',
+                  showLabels ? 'px-2.5 py-2' : 'lg:justify-center lg:size-9 lg:px-0',
                   isActive ? 'bg-ink-100 text-ink-900 font-medium' : 'text-ink-700 hover:bg-ink-50',
                 )
               }
             >
               <Icon name={it.icon} />
-              {it.label}
+              {showLabels && <span className="truncate">{it.label}</span>}
             </NavLink>
           ))}
         </nav>
 
-        <div className="px-3 py-3 border-t border-ink-200">
+        <div className="px-3 py-3 border-t border-ink-200 space-y-1">
           {me && (
-            <div className="flex items-center gap-2.5 px-2 py-2">
+            <div
+              className={clsx(
+                'flex items-center gap-2.5 px-2 py-2',
+                desktopCollapsed && 'lg:justify-center lg:px-0',
+              )}
+            >
               <span
-                className="inline-grid place-items-center size-8 rounded-full bg-ink-100 text-ink-800 text-[12px] font-semibold"
+                className="inline-grid place-items-center size-8 rounded-full bg-ink-100 text-ink-800 text-[12px] font-semibold shrink-0"
                 aria-hidden
               >
                 {initials(me.displayName)}
               </span>
-              <div className="leading-tight min-w-0">
-                <p className="text-[13px] font-medium text-ink-900 truncate">{me.displayName}</p>
-                <p className="text-[11px] text-ink-500 truncate">{me.orgName}</p>
-              </div>
+              {showLabels && (
+                <div className="leading-tight min-w-0">
+                  <p className="text-[13px] font-medium text-ink-900 truncate">{me.displayName}</p>
+                  <p className="text-[11px] text-ink-500 truncate">{me.orgName}</p>
+                </div>
+              )}
             </div>
           )}
-          <button
-            className="mt-2 w-full text-left text-[12px] text-ink-500 hover:text-ink-800 px-2"
-            onClick={async () => {
-              await logout();
-              toast.push({ tone: 'info', title: 'Sesión cerrada' });
-              navigate('/login');
-            }}
-          >
-            Cerrar sesión
-          </button>
+          <div className={clsx('flex', desktopCollapsed ? 'lg:flex-col lg:gap-1' : 'flex-col gap-1')}>
+            <button
+              type="button"
+              aria-label={desktopCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+              onClick={() => setDesktopCollapsed((v) => !v)}
+              className={clsx(
+                'text-[12px] text-ink-500 hover:text-ink-800 px-2 py-1.5 rounded-md hover:bg-ink-50 hidden lg:block',
+                !showLabels ? 'lg:text-center' : 'lg:text-left',
+              )}
+            >
+              {desktopCollapsed ? '»' : '« Colapsar'}
+            </button>
+            <button
+              type="button"
+              className="text-[12px] text-ink-500 hover:text-ink-800 px-2 py-1.5 rounded-md hover:bg-ink-50 text-left"
+              onClick={async () => {
+                await logout();
+                toast.push({ tone: 'info', title: 'Sesión cerrada' });
+                navigate('/login');
+              }}
+            >
+              {showLabels ? 'Cerrar sesión' : '⎋'}
+            </button>
+          </div>
         </div>
       </aside>
 
