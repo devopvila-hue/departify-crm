@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Button } from '../../components/design-system/Button';
 import { Input, Field } from '../../components/design-system/Input';
@@ -9,6 +9,9 @@ import { EmptyState } from '../../components/design-system/EmptyState';
 import { Badge } from '../../components/design-system/Badge';
 import { useToast } from '../../components/design-system/Toast';
 import { formatShortDate } from '../../lib/format';
+
+type SortKey = 'name' | 'created_at';
+type SortDir = 'asc' | 'desc';
 
 interface Company {
   id: string;
@@ -29,69 +32,163 @@ interface Page<T> {
   totalPages: number;
 }
 
+const PAGE_SIZE = 25;
+
 export function CompaniesPage() {
-  const [search, setSearch] = useState('');
+  const [params, setParams] = useSearchParams();
+  const search = params.get('q') ?? '';
+  const sort = (params.get('sort') as SortKey) || 'created_at';
+  const order = (params.get('order') as SortDir) || 'desc';
+  const page = Math.max(1, Number(params.get('page') || 1));
+
   const [createOpen, setCreateOpen] = useState(false);
-  const { data, isLoading } = useQuery({
-    queryKey: ['companies', search],
-    queryFn: () => api.get<Page<Company>>(`/api/v1/companies?pageSize=50${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+  const [editTarget, setEditTarget] = useState<Company | null>(null);
+
+  const qs = new URLSearchParams();
+  qs.set('page', String(page));
+  qs.set('pageSize', String(PAGE_SIZE));
+  if (search) qs.set('search', search);
+  if (sort) qs.set('sort', sort);
+  if (order) qs.set('order', order);
+  const url = `/api/v1/companies?${qs.toString()}`;
+
+  const q = useQuery({
+    queryKey: ['companies', { q: search, sort, order, page }],
+    queryFn: () => api.get<Page<Company>>(url),
+    placeholderData: (prev) => prev,
   });
+
+  function setParam(key: string, value: string | null) {
+    const next = new URLSearchParams(params);
+    if (value === null || value === '') next.delete(key);
+    else next.set(key, value);
+    if (key !== 'page') next.set('page', '1');
+    setParams(next, { replace: true });
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sort === key) {
+      setParam('order', order === 'asc' ? 'desc' : 'asc');
+    } else {
+      setParam('sort', key);
+      setParam('order', 'asc');
+    }
+  }
+
+  const total = q.data?.total ?? 0;
+  const totalPages = q.data?.totalPages ?? Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   return (
-    <div className="px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
+    <div className="px-4 sm:px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Empresas</p>
           <h1 className="text-2xl font-semibold text-ink-900 mt-1">Cuentas</h1>
+          {total > 0 && (
+            <p className="text-[12px] text-ink-500 mt-0.5">{total} en total</p>
+          )}
         </div>
         <Button variant="accent" onClick={() => setCreateOpen(true)}>Nueva empresa</Button>
       </header>
+
       <div className="card p-3 mb-4">
-        <Input placeholder="Buscar por nombre, dominio, ciudad o sector" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
-      {isLoading && <p className="text-sm text-ink-500">Cargando…</p>}
-      {data && data.items.length === 0 && (
-        <EmptyState
-          title="Sin empresas"
-          description="Crea la primera para empezar a clasificar tus cuentas."
-          action={<Button variant="accent" onClick={() => setCreateOpen(true)}>Crear empresa</Button>}
+        <Input
+          placeholder="Buscar por nombre, dominio, ciudad o sector"
+          value={search}
+          onChange={(e) => setParam('q', e.target.value || null)}
         />
-      )}
-      {data && data.items.length > 0 && (
-        <div className="card overflow-hidden">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Empresa</th>
-                <th>Sector</th>
-                <th>Ubicación</th>
-                <th>Estado</th>
-                <th className="text-right">Creada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link to={`/companies/${c.id}`} className="block">
-                      <p className="text-sm font-medium text-ink-900">{c.name}</p>
-                      {c.domain && <p className="text-[11px] text-ink-500">{c.domain}</p>}
-                    </Link>
-                  </td>
-                  <td className="text-ink-700">{c.industry ?? '—'}</td>
-                  <td className="text-ink-700">{[c.city, c.country].filter(Boolean).join(', ') || '—'}</td>
-                  <td>
-                    <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>{c.status}</Badge>
-                  </td>
-                  <td className="text-right text-[12px] text-ink-500">{formatShortDate(c.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      </div>
+
+      {/* Loading */}
+      {q.isLoading && <p className="text-sm text-ink-500 px-2 py-4">Cargando…</p>}
+
+      {/* Error */}
+      {q.isError && !q.isLoading && (
+        <div className="card p-6 text-center">
+          <p className="text-sm text-signal-bad mb-2">No se pudieron cargar las empresas.</p>
+          <p className="text-[12px] text-ink-500 mb-3">{(q.error as Error)?.message ?? 'Error desconocido'}</p>
+          <Button variant="outline" onClick={() => q.refetch()} loading={q.isFetching}>Reintentar</Button>
         </div>
       )}
+
+      {/* Empty */}
+      {q.data && q.data.items.length === 0 && !q.isLoading && !q.isError && (
+        <EmptyState
+          title={search ? 'Sin resultados' : 'Sin empresas'}
+          description={search ? `No hay empresas que coincidan con "${search}".` : 'Crea la primera para empezar a clasificar tus cuentas.'}
+          action={!search && <Button variant="accent" onClick={() => setCreateOpen(true)}>Crear empresa</Button>}
+        />
+      )}
+
+      {/* Data */}
+      {q.data && q.data.items.length > 0 && (
+        <>
+          <div className="card overflow-hidden">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" onClick={() => toggleSort('name')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                      Empresa <SortIndicator active={sort === 'name'} dir={order} />
+                    </button>
+                  </th>
+                  <th>Sector</th>
+                  <th>Ubicación</th>
+                  <th>Estado</th>
+                  <th>
+                    <button type="button" onClick={() => toggleSort('created_at')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                      Creada <SortIndicator active={sort === 'created_at'} dir={order} />
+                    </button>
+                  </th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.data.items.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link to={`/companies/${c.id}`} className="block">
+                        <p className="text-sm font-medium text-ink-900">{c.name}</p>
+                        {c.domain && <p className="text-[11px] text-ink-500">{c.domain}</p>}
+                      </Link>
+                    </td>
+                    <td className="text-ink-700">{c.industry ?? '—'}</td>
+                    <td className="text-ink-700">{[c.city, c.country].filter(Boolean).join(', ') || '—'}</td>
+                    <td>
+                      <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>{c.status}</Badge>
+                    </td>
+                    <td className="text-right text-[12px] text-ink-500">{formatShortDate(c.createdAt)}</td>
+                    <td className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditTarget(c)}>Editar</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between mt-3 text-[12px] text-ink-500">
+            <span>
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setParam('page', String(page - 1))}>Anterior</Button>
+              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setParam('page', String(page + 1))}>Siguiente</Button>
+            </div>
+          </div>
+        </>
+      )}
+
       <CreateCompanyModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {editTarget && <EditCompanyModal company={editTarget} onClose={() => setEditTarget(null)} />}
     </div>
   );
+}
+
+function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <span className="text-ink-300">↕</span>;
+  return <span className="text-ink-700">{dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
 function CreateCompanyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -123,13 +220,107 @@ function CreateCompanyModal({ open, onClose }: { open: boolean; onClose: () => v
         </>
       }
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Nombre"><Input value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
-        <Field label="Dominio"><Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="empresa.com" /></Field>
-        <Field label="Sector"><Input value={industry} onChange={(e) => setIndustry(e.target.value)} /></Field>
-        <Field label="País"><Input value={country} onChange={(e) => setCountry(e.target.value)} /></Field>
-        <Field label="Ciudad"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-      </div>
+      <CompanyFields
+        values={{ name, domain, industry, country, city }}
+        onChange={(p) => {
+          if (p.name !== undefined) setName(p.name ?? '');
+          if (p.domain !== undefined) setDomain(p.domain ?? '');
+          if (p.industry !== undefined) setIndustry(p.industry ?? '');
+          if (p.country !== undefined) setCountry(p.country ?? '');
+          if (p.city !== undefined) setCity(p.city ?? '');
+        }}
+        autoFocus
+      />
     </Modal>
+  );
+}
+
+function EditCompanyModal({ company, onClose }: { company: Company; onClose: () => void }) {
+  const [name, setName] = useState(company.name);
+  const [domain, setDomain] = useState(company.domain ?? '');
+  const [industry, setIndustry] = useState(company.industry ?? '');
+  const [country, setCountry] = useState(company.country ?? 'ES');
+  const [city, setCity] = useState(company.city ?? '');
+  const [status, setStatus] = useState(company.status);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const update = useMutation({
+    mutationFn: () =>
+      api.patch(`/api/v1/companies/${company.id}`, {
+        name,
+        domain: domain || null,
+        industry: industry || null,
+        country,
+        city: city || null,
+        status,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['companies'] });
+      void qc.invalidateQueries({ queryKey: ['company', company.id] });
+      toast.push({ tone: 'ok', title: 'Empresa actualizada' });
+      onClose();
+    },
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Editar ${company.name}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="accent" onClick={() => update.mutate()} disabled={!name || update.isPending} loading={update.isPending}>Guardar</Button>
+        </>
+      }
+    >
+      <CompanyFields
+        values={{ name, domain, industry, country, city, status }}
+        onChange={(p) => {
+          if (p.name !== undefined) setName(p.name ?? '');
+          if (p.domain !== undefined) setDomain(p.domain ?? '');
+          if (p.industry !== undefined) setIndustry(p.industry ?? '');
+          if (p.country !== undefined) setCountry(p.country ?? '');
+          if (p.city !== undefined) setCity(p.city ?? '');
+          if (p.status !== undefined) setStatus(p.status as Company['status']);
+        }}
+        showStatus
+        autoFocus
+      />
+    </Modal>
+  );
+}
+
+function CompanyFields({
+  values,
+  onChange,
+  showStatus,
+  autoFocus,
+}: {
+  values: Partial<Company>;
+  onChange: (patch: Partial<Company>) => void;
+  showStatus?: boolean;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Field label="Nombre"><Input value={values.name ?? ''} onChange={(e) => onChange({ name: e.target.value })} autoFocus={autoFocus} /></Field>
+      <Field label="Dominio"><Input value={values.domain ?? ''} onChange={(e) => onChange({ domain: e.target.value })} placeholder="empresa.com" /></Field>
+      <Field label="Sector"><Input value={values.industry ?? ''} onChange={(e) => onChange({ industry: e.target.value })} /></Field>
+      <Field label="País"><Input value={values.country ?? ''} onChange={(e) => onChange({ country: e.target.value })} /></Field>
+      <Field label="Ciudad"><Input value={values.city ?? ''} onChange={(e) => onChange({ city: e.target.value })} /></Field>
+      {showStatus && (
+        <Field label="Estado">
+          <select
+            value={values.status ?? 'active'}
+            onChange={(e) => onChange({ status: e.target.value as Company['status'] })}
+            className="h-9 w-full rounded-md border border-ink-200 bg-white px-3 text-sm"
+          >
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+            <option value="archived">archived</option>
+          </select>
+        </Field>
+      )}
+    </div>
   );
 }
