@@ -34,3 +34,4 @@ coverage/
 
 # Drizzle
 packages/db/migrations/meta/_journal.json.bak
+.audit-evidence/

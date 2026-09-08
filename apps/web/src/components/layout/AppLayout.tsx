@@ -132,7 +132,7 @@ export function AppLayout() {
   const showLabels = !desktopCollapsed;
 
   return (
-    <div className="min-h-dvh bg-ink-50 lg:grid lg:grid-cols-[1fr] lg:[grid-template-columns:theme(width.68)_1fr] data-[collapsed=false]:lg:[grid-template-columns:theme(width.240)_1fr]">
+    <div className="min-h-dvh bg-ink-50 lg:flex">
       {/* Mobile topbar */}
       <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-ink-200 px-4 py-2.5 flex items-center gap-2">
         <button
