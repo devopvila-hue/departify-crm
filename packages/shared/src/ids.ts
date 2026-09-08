@@ -15,7 +15,7 @@ function timeCharAt(buf: number, i: number): string {
 export function generateId(prefix: string): string {
   const time = Date.now();
   const timeBuf = Buffer.alloc(4);
-  timeBuf.writeUInt32BE(time & 0xffffffff, 0);
+  timeBuf.writeUInt32BE(time >>> 0, 0);
   let timeStr = '';
   for (let i = 0; i < 8; i++) timeStr += timeCharAt(timeBuf.readUInt32BE(0) >>> (i * 4), 0);
 
