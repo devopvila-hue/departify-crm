@@ -53,6 +53,18 @@ interface Task {
   dueAt: string | null;
 }
 
+interface Activity {
+  id: string;
+  type: 'note' | 'email' | 'call' | 'meeting' | 'task' | 'status_change' | 'deal_change' | 'sequence_event' | 'system_event';
+  subjectType: 'contact' | 'company' | 'deal' | 'organization';
+  subjectId: string;
+  actorId: string | null;
+  title: string;
+  body: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
 interface Page<T> {
   items: T[];
   total: number;
@@ -88,6 +100,13 @@ export function CompanyDetailPage() {
   const tasks = useQuery({
     queryKey: ['company-tasks', id],
     queryFn: () => api.get<Page<Task>>(`/api/v1/tasks?pageSize=100&subjectType=company&subjectId=${encodeURIComponent(id)}`),
+    enabled: !!id && !!company.data,
+    placeholderData: (prev) => prev,
+  });
+
+  const activities = useQuery({
+    queryKey: ['company-activities', id],
+    queryFn: () => api.get<Page<Activity>>(`/api/v1/activities?pageSize=50&subjectType=company&subjectId=${encodeURIComponent(id)}`),
     enabled: !!id && !!company.data,
     placeholderData: (prev) => prev,
   });
@@ -252,15 +271,35 @@ export function CompanyDetailPage() {
             )}
           </section>
 
-          {/* Activity (placeholder pending Commit 5) */}
+          {/* Activity timeline */}
           <section className="card p-5">
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Actividad</h2>
+              <span className="text-[12px] text-ink-500">{activities.data?.items.length ?? 0} eventos</span>
             </header>
-            <EmptyState
-              title="Sin actividad reciente"
-              description="La línea de tiempo detallada llega en el siguiente commit del vertical."
-            />
+            {activities.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
+            {activities.data && activities.data.items.length === 0 && (
+              <EmptyState
+                title="Sin actividad reciente"
+                description="Aún no hay eventos registrados para esta empresa."
+              />
+            )}
+            {activities.data && activities.data.items.length > 0 && (
+              <ul className="divide-y divide-ink-100">
+                {activities.data.items.map((a) => (
+                  <li key={a.id} className="py-2.5 flex items-start gap-3">
+                    <ActivityTypeBadge type={a.type} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-ink-900 truncate">{a.title}</p>
+                      {a.body && <p className="text-[12px] text-ink-500 line-clamp-2 mt-0.5">{a.body}</p>}
+                      <p className="text-[11px] text-ink-400 mt-0.5">
+                        {a.actorId ? 'Usuario' : 'Sistema'} · {formatShortDate(a.createdAt)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </div>
       </div>
@@ -305,3 +344,19 @@ function formatMoney(minor: number, currency: string): string {
 
 // re-export Button import marker (used by sibling commits if needed)
 void Button;
+
+function ActivityTypeBadge({ type }: { type: Activity['type'] }) {
+  const map: Record<Activity['type'], { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' | 'lime' }> = {
+    note: { label: 'Nota', tone: 'neutral' },
+    email: { label: 'Email', tone: 'lime' },
+    call: { label: 'Llamada', tone: 'lime' },
+    meeting: { label: 'Reunión', tone: 'lime' },
+    task: { label: 'Tarea', tone: 'neutral' },
+    status_change: { label: 'Estado', tone: 'warn' },
+    deal_change: { label: 'Deal', tone: 'ok' },
+    sequence_event: { label: 'Secuencia', tone: 'neutral' },
+    system_event: { label: 'Sistema', tone: 'neutral' },
+  };
+  const m = map[type] ?? { label: type, tone: 'neutral' };
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
