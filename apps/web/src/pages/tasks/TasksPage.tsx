@@ -10,7 +10,7 @@ import { Badge } from '../../components/design-system/Badge';
 import { useToast } from '../../components/design-system/Toast';
 import { formatDate } from '../../lib/format';
 
-interface Task {
+export interface Task {
   id: string;
   title: string;
   description: string | null;
@@ -49,7 +49,7 @@ export function TasksPage() {
   });
 
   return (
-    <div className="px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
+    <div className="px-4 sm:px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Tareas</p>
@@ -116,7 +116,25 @@ export function TasksPage() {
   );
 }
 
-function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export interface CreateTaskModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialSubjectType?: Task['subjectType'];
+  initialSubjectId?: string;
+  /** Optional label rendered above the title input, e.g. "Vinculada a Acme Vertical 1 Test". */
+  subjectLabel?: string;
+  /** Extra query keys to invalidate on success (e.g. ['company-tasks', id]). */
+  extraInvalidateKeys?: ReadonlyArray<readonly unknown[]>;
+}
+
+export function CreateTaskModal({
+  open,
+  onClose,
+  initialSubjectType,
+  initialSubjectId,
+  subjectLabel,
+  extraInvalidateKeys,
+}: CreateTaskModalProps) {
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
@@ -128,10 +146,15 @@ function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void
         title,
         dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
         priority,
+        ...(initialSubjectType ? { subjectType: initialSubjectType } : {}),
+        ...(initialSubjectId ? { subjectId: initialSubjectId } : {}),
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['attention'] });
+      for (const key of extraInvalidateKeys ?? []) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
       toast.push({ tone: 'ok', title: 'Tarea creada' });
       onClose();
       setTitle(''); setDueAt('');
@@ -141,7 +164,7 @@ function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void
     <Modal
       open={open}
       onClose={onClose}
-      title="Nueva tarea"
+      title={subjectLabel ? `Nueva tarea · ${subjectLabel}` : 'Nueva tarea'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
@@ -150,9 +173,12 @@ function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void
       }
     >
       <div className="space-y-3">
-        <Field label="Título"><Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /></Field>
+        {subjectLabel && (
+          <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">{subjectLabel}</p>
+        )}
+        <Field label="Título"><Input value={title} onChange={(e) => setTitle(e.target.value ?? '')} autoFocus /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Vencimiento"><Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} /></Field>
+          <Field label="Vencimiento"><Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value ?? '')} /></Field>
           <Field label="Prioridad">
             <select
               value={priority}

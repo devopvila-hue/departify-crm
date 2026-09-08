@@ -1,10 +1,12 @@
 import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { Badge } from '../../components/design-system/Badge';
 import { Button } from '../../components/design-system/Button';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { formatDate, formatShortDate } from '../../lib/format';
+import { CreateTaskModal } from '../tasks/TasksPage';
 
 interface Company {
   id: string;
@@ -61,6 +63,7 @@ interface Page<T> {
 
 export function CompanyDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const company = useQuery({
     queryKey: ['company', id],
@@ -213,7 +216,12 @@ export function CompanyDetailPage() {
           <section className="card p-5">
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Tareas</h2>
-              <span className="text-[12px] text-ink-500">{tasks.data?.items.length ?? 0} abiertas</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-ink-500">{tasks.data?.items.length ?? 0} abiertas</span>
+                <Button size="sm" variant="outline" onClick={() => setTaskModalOpen(true)}>
+                  Nueva tarea
+                </Button>
+              </div>
             </header>
             {tasks.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
             {tasks.data && tasks.data.items.length === 0 && (
@@ -256,6 +264,15 @@ export function CompanyDetailPage() {
           </section>
         </div>
       </div>
+
+      <CreateTaskModal
+        open={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+        initialSubjectType="company"
+        initialSubjectId={c.id}
+        subjectLabel={c.name}
+        extraInvalidateKeys={[['company-tasks', c.id]]}
+      />
     </div>
   );
 }
