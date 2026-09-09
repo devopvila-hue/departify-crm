@@ -12,76 +12,28 @@
  *  7. Webhook: signature verification + idempotent message_event writes.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { spawn } from 'node:child_process';
-import { setTimeout as wait } from 'node:timers/promises';
 import { sql, eq, and } from 'drizzle-orm';
 import { createDb, schema } from '@departify-crm/db';
 import { generateId, Prefixes, renderEmail, previewContext, EmailMessage, EmailSendResult, EmailSendError } from '@departify-crm/shared';
 import { FakeProvider, ResendProvider, BrevoProvider } from '../src/email/providers.js';
 import { signUnsubToken, verifyUnsubToken } from '../src/email/unsubToken.js';
 import argon2 from 'argon2';
+import { startTestApi, resetSchema, type TestApi } from './helpers/test-api';
 import { createHmac } from 'node:crypto';
 
-const BASE_URL = process.env.TEST_API_URL ?? 'http://127.0.0.1:4101';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/departify_crm_test_email';
 
-let serverHandle: ReturnType<typeof spawn> | null = null;
-
-async function waitForServer(): Promise<void> {
-  for (let i = 0; i < 60; i++) {
-    try {
-      const res = await fetch(`${BASE_URL}/health`);
-      if (res.ok) return;
-    } catch {
-      /* retry */
-    }
-    await wait(250);
-  }
-  throw new Error('test API did not come up');
-}
+let api: TestApi | null = null;
+let BASE_URL = '';
 
 beforeAll(async () => {
-  if (process.env.SKIP_SERVER === '1') return;
-  const db = createDb(DATABASE_URL);
-  await db.execute(sql`drop schema public cascade; create schema public;`);
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const migrationsDir = path.resolve(__dirname, '..', '..', '..', 'packages', 'db', 'migrations');
-  if (fs.existsSync(migrationsDir)) {
-    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
-    for (const f of files) {
-      const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
-      const statements = sqlText.split(/-->\s*statement-breakpoint/).map((s) => s.trim()).filter(Boolean);
-      for (const stmt of statements) {
-        try { await db.execute(sql.raw(stmt)); } catch { /* ignore IF NOT EXISTS races */ }
-      }
-    }
-  }
-  serverHandle = spawn('node', ['--import', 'tsx', 'src/index.ts'], {
-    cwd: new URL('..', import.meta.url).pathname,
-    env: {
-      ...process.env,
-      DATABASE_URL,
-      PORT: '4101',
-      HOST: '127.0.0.1',
-      NODE_ENV: 'test',
-      SESSION_SECRET: 'a'.repeat(32),
-      ENCRYPTION_KEY: 'b'.repeat(32),
-      UNSUB_SECRET: 'test-unsub-secret-for-vitest-please-rotate',
-      LOG_LEVEL: 'warn',
-      RATE_LIMIT_DEFAULT_MAX: '10000',
-    },
-    stdio: 'pipe',
-  });
-  serverHandle.stderr?.on('data', (b) => process.stderr.write(`[api] ${b}`));
-  await waitForServer();
+  await resetSchema(DATABASE_URL);
+  api = await startTestApi(DATABASE_URL);
+  BASE_URL = api.baseUrl;
 }, 60_000);
 
 afterAll(async () => {
-  if (serverHandle) {
-    serverHandle.kill('SIGTERM');
-    await wait(500);
-  }
+  await api?.stop();
 });
 
 function sampleMsg(over: Partial<EmailMessage> = {}): EmailMessage {
