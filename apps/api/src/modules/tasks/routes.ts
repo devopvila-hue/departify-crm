@@ -7,6 +7,7 @@ import { badRequest, notFound } from '../../errors.js';
 import { requireRole } from '../../tenants/plugin.js';
 import { audit } from '../../audit/log.js';
 import { recordActivity } from '../../activities/log.js';
+import { assertOwned } from '../../lib/ownership.js';
 
 const TaskCreate = z.object({
   title: z.string().min(1).max(200),
@@ -56,6 +57,9 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     if (!tenant.userId) throw badRequest('Tasks can only be created by a human user');
     const parsed = TaskCreate.safeParse(req.body); if (!parsed.success) throw badRequest('Invalid body', { issues: parsed.error.flatten() }); const body = parsed.data;
+    if (body.subjectType !== 'general' && body.subjectId) {
+      await assertOwned(tenant, body.subjectType, body.subjectId);
+    }
     const id = generateId(Prefixes.task);
     await tenant.db.insert(schema.tasks).values({
       id,
@@ -85,6 +89,19 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const parsed = TaskUpdate.safeParse(req.body); if (!parsed.success) throw badRequest('Invalid body', { issues: parsed.error.flatten() }); const body = parsed.data;
+    if (body.subjectId) {
+      const current = (
+        await tenant.db
+          .select({ subjectType: schema.tasks.subjectType })
+          .from(schema.tasks)
+          .where(and(eq(schema.tasks.organizationId, tenant.organizationId), eq(schema.tasks.id, id)))
+          .limit(1)
+      )[0];
+      if (!current) throw notFound('Task not found');
+      const subjectType = body.subjectType ?? current.subjectType;
+      if (subjectType === 'general') throw badRequest('A general task cannot carry a subjectId');
+      await assertOwned(tenant, subjectType, body.subjectId);
+    }
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     for (const [k, v] of Object.entries(body)) {
       if (v === undefined) continue;

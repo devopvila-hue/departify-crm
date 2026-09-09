@@ -7,6 +7,7 @@ import { badRequest, notFound } from '../../errors.js';
 import { requireRole } from '../../tenants/plugin.js';
 import { audit } from '../../audit/log.js';
 import { recordActivity } from '../../activities/log.js';
+import { assertOwned, assertAllOwned } from '../../lib/ownership.js';
 
 const DealCreate = z.object({
   pipelineId: z.string().min(1),
@@ -45,6 +46,7 @@ const DealList = z.object({
   ...PaginationQuery.shape,
   pipelineId: z.string().optional(),
   stageId: z.string().optional(),
+  companyId: z.string().max(64).optional(),
   status: z.enum(['open', 'won', 'lost', 'all']).default('open'),
   sort: z.enum(['created_at', 'updated_at', 'value_minor', 'expected_close_at']).default('updated_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
@@ -61,6 +63,7 @@ export async function dealRoutes(app: FastifyInstance) {
     const conds = [eq(schema.deals.organizationId, tenant.organizationId)];
     if (q.pipelineId) conds.push(eq(schema.deals.pipelineId, q.pipelineId));
     if (q.stageId) conds.push(eq(schema.deals.stageId, q.stageId));
+    if (q.companyId) conds.push(eq(schema.deals.companyId, q.companyId));
     if (q.status !== 'all') conds.push(eq(schema.deals.status, q.status));
     const where = and(...conds);
     const orderCol = (() => {
@@ -83,13 +86,21 @@ export async function dealRoutes(app: FastifyInstance) {
       .where(where);
     const count = countRow[0]?.count ?? 0;
     const items = await tenant.db
-      .select()
+      .select({
+        deal: schema.deals,
+        stageName: schema.stages.name,
+      })
       .from(schema.deals)
+      .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
       .where(where)
       .orderBy(orderBy)
       .limit(q.pageSize)
       .offset(offset);
-    return paginate(items, count, q);
+    return paginate(
+      items.map((r) => ({ ...r.deal, stageName: r.stageName })),
+      count,
+      q,
+    );
   });
 
   app.post('/deals', { preHandler: [requireRole('member')] }, async (req, reply) => {
@@ -106,6 +117,8 @@ export async function dealRoutes(app: FastifyInstance) {
         .limit(1)
     )[0];
     if (!stage) throw badRequest('Stage does not belong to the given pipeline or organization');
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
+    await assertAllOwned(tenant, 'contact', body.contactIds);
 
     const id = generateId(Prefixes.deal);
     const valueMinor = Math.round(body.value * 100);
@@ -163,6 +176,7 @@ export async function dealRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const parsed = DealUpdate.safeParse(req.body); if (!parsed.success) throw badRequest('Invalid body', { issues: parsed.error.flatten() }); const body = parsed.data;
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.value !== undefined) updates.valueMinor = Math.round(body.value * 100);
     for (const [k, v] of Object.entries(body)) {
