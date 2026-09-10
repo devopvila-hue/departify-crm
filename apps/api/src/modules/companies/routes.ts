@@ -30,6 +30,7 @@ const CompanyUpdate = CompanyCreate.partial();
 const CompanyList = z.object({
   ...PaginationQuery.shape,
   search: z.string().max(200).optional(),
+  status: z.enum(['active', 'inactive', 'archived']).optional(),
   filter: z.unknown().optional(),
   sort: z.enum(['created_at', 'updated_at', 'name']).default('updated_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
@@ -53,6 +54,7 @@ export async function companyRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const q = CompanyList.parse(req.query);
     const conds = [eq(schema.companies.organizationId, tenant.organizationId)];
+    if (q.status) conds.push(eq(schema.companies.status, q.status));
     if (q.search) {
       const s = `%${q.search}%`;
       conds.push(
