@@ -190,12 +190,17 @@ export async function dealRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const rows = await tenant.db
-      .select()
+      .select({
+        deal: schema.deals,
+        companyName: schema.companies.name,
+      })
       .from(schema.deals)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(and(eq(schema.deals.organizationId, tenant.organizationId), eq(schema.deals.id, id)))
       .limit(1);
     if (!rows.length) throw notFound('Deal not found');
-    const deal = rows[0]!;
+    const row = rows[0]!;
+    const deal = row.deal;
     const contacts = await tenant.db
       .select({
         id: schema.contacts.id,
@@ -206,7 +211,7 @@ export async function dealRoutes(app: FastifyInstance) {
       .from(schema.dealContacts)
       .innerJoin(schema.contacts, eq(schema.contacts.id, schema.dealContacts.contactId))
       .where(eq(schema.dealContacts.dealId, id));
-    return { ...deal, contacts };
+    return { ...deal, companyName: row.companyName ?? null, contacts };
   });
 
   app.patch('/deals/:id', { preHandler: [requireRole('member')] }, async (req) => {
