@@ -37,7 +37,10 @@ export interface ActivityItemData {
   createdAt: string;
 }
 
-const TYPE_META: Record<ActivityType, { label: string; tone: 'neutral' | 'lime' | 'warn' | 'bad' | 'ok' | 'blue' }> = {
+const TYPE_META: Record<
+  ActivityType,
+  { label: string; tone: 'neutral' | 'lime' | 'warn' | 'bad' | 'ok' | 'blue' }
+> = {
   note: { label: 'Nota', tone: 'neutral' },
   email: { label: 'Email', tone: 'blue' },
   call: { label: 'Llamada', tone: 'lime' },
@@ -50,34 +53,87 @@ const TYPE_META: Record<ActivityType, { label: string; tone: 'neutral' | 'lime' 
 };
 
 function TypeIcon({ type }: { type: ActivityType }) {
-  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
   switch (type) {
     case 'note':
-      return <svg {...common}><path d="M5 4h14v11l-5 5H5z" /><path d="M14 20v-5h5" /></svg>;
+      return (
+        <svg {...common}>
+          <path d="M5 4h14v11l-5 5H5z" />
+          <path d="M14 20v-5h5" />
+        </svg>
+      );
     case 'email':
-      return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg>;
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+      );
     case 'call':
-      return <svg {...common}><path d="M5 4h3l2 5-2 1a11 11 0 005 5l1-2 5 2v3a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z" /></svg>;
+      return (
+        <svg {...common}>
+          <path d="M5 4h3l2 5-2 1a11 11 0 005 5l1-2 5 2v3a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z" />
+        </svg>
+      );
     case 'meeting':
-      return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>;
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 10h18M8 3v4M16 3v4" />
+        </svg>
+      );
     case 'deal_change':
     case 'status_change':
-      return <svg {...common}><path d="M4 17V9M10 17V5M16 17v-6M20 17V7" /></svg>;
+      return (
+        <svg {...common}>
+          <path d="M4 17V9M10 17V5M16 17v-6M20 17V7" />
+        </svg>
+      );
     case 'task':
-      return <svg {...common}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 12l2 2 4-4" /></svg>;
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+      );
     case 'sequence_event':
-      return <svg {...common}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8 7l8 4M8 17l8-4" /></svg>;
+      return (
+        <svg {...common}>
+          <circle cx="6" cy="6" r="2.5" />
+          <circle cx="18" cy="12" r="2.5" />
+          <circle cx="6" cy="18" r="2.5" />
+          <path d="M8 7l8 4M8 17l8-4" />
+        </svg>
+      );
     default:
-      return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2 2" /></svg>;
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 8v4l2 2" />
+        </svg>
+      );
   }
 }
 
 function subjectHref(a: ActivityItemData): string | null {
   switch (a.subjectType) {
-    case 'company': return `/companies/${a.subjectId}`;
-    case 'contact': return `/contacts/${a.subjectId}`;
-    case 'deal': return `/deals/${a.subjectId}`;
-    default: return null;
+    case 'company':
+      return `/companies/${a.subjectId}`;
+    case 'contact':
+      return `/contacts/${a.subjectId}`;
+    case 'deal':
+      return `/deals/${a.subjectId}`;
+    default:
+      return null;
   }
 }
 
@@ -121,7 +177,9 @@ export function ActivityFeed({
     <div className="space-y-5">
       {BUCKET_ORDER.filter((b) => groups.has(b)).map((bucket) => (
         <section key={bucket}>
-          <h3 className="text-[11px] uppercase tracking-wide text-ink-500 font-medium mb-2">{bucket}</h3>
+          <h3 className="text-[11px] uppercase tracking-wide text-ink-500 font-medium mb-2">
+            {bucket}
+          </h3>
           <ol className="card divide-y divide-ink-100 overflow-hidden">
             {groups.get(bucket)!.map((a) => (
               <ActivityRow key={a.id} activity={a} showSubject={showSubject} />
@@ -133,11 +191,19 @@ export function ActivityFeed({
   );
 }
 
-export function ActivityRow({ activity: a, showSubject = true }: { activity: ActivityItemData; showSubject?: boolean }) {
+export function ActivityRow({
+  activity: a,
+  showSubject = true,
+}: {
+  activity: ActivityItemData;
+  showSubject?: boolean;
+}) {
   const meta = TYPE_META[a.type] ?? TYPE_META.system_event;
   const href = subjectHref(a);
   const isToday = dayBucket(a.createdAt) === 'Hoy';
-  const when = isToday ? fmtTime.format(new Date(a.createdAt)) : `${formatShortDate(a.createdAt)} · ${relativeFromNow(a.createdAt)}`;
+  const when = isToday
+    ? fmtTime.format(new Date(a.createdAt))
+    : `${formatShortDate(a.createdAt)} · ${relativeFromNow(a.createdAt)}`;
 
   return (
     <li className="flex items-start gap-3 px-4 py-3">
@@ -158,15 +224,19 @@ export function ActivityRow({ activity: a, showSubject = true }: { activity: Act
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <p className="text-sm text-ink-900">{a.title}</p>
-          {showSubject && a.subjectName && (
-            href ? (
-              <Link to={href} className="text-[12px] text-ink-600 hover:text-ink-900 hover:underline">
+          {showSubject &&
+            a.subjectName &&
+            !a.title.includes(a.subjectName) &&
+            (href ? (
+              <Link
+                to={href}
+                className="text-[12px] text-ink-600 hover:text-ink-900 hover:underline"
+              >
                 {a.subjectName}
               </Link>
             ) : (
               <span className="text-[12px] text-ink-500">{a.subjectName}</span>
-            )
-          )}
+            ))}
         </div>
         {a.body && <p className="text-[12px] text-ink-500 mt-0.5 line-clamp-2">{a.body}</p>}
         <p className="text-[11px] text-ink-400 mt-1">

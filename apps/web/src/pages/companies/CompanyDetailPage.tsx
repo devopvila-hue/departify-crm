@@ -6,6 +6,13 @@ import { Badge } from '../../components/design-system/Badge';
 import { Button } from '../../components/design-system/Button';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { formatDate, formatShortDate, formatMoney } from '../../lib/format';
+import {
+  COMPANY_STATUS_LABEL,
+  DEAL_STATUS_LABEL,
+  LIFECYCLE_LABEL,
+  PRIORITY_LABEL,
+  label,
+} from '../../lib/labels';
 import { CreateTaskModal } from '../tasks/TasksPage';
 import { CreateDealModal } from '../pipelines/PipelinePage';
 import { CreateContactModal } from '../contacts/ContactsPage';
@@ -92,28 +99,36 @@ export function CompanyDetailPage() {
 
   const contacts = useQuery({
     queryKey: ['company-contacts', id],
-    queryFn: () => api.get<Page<Contact>>(`/api/v1/contacts?pageSize=100&companyId=${encodeURIComponent(id)}`),
+    queryFn: () =>
+      api.get<Page<Contact>>(`/api/v1/contacts?pageSize=100&companyId=${encodeURIComponent(id)}`),
     enabled: !!id && !!company.data,
     placeholderData: (prev) => prev,
   });
 
   const deals = useQuery({
     queryKey: ['company-deals', id],
-    queryFn: () => api.get<Page<Deal>>(`/api/v1/deals?pageSize=100&companyId=${encodeURIComponent(id)}`),
+    queryFn: () =>
+      api.get<Page<Deal>>(`/api/v1/deals?pageSize=100&companyId=${encodeURIComponent(id)}`),
     enabled: !!id && !!company.data,
     placeholderData: (prev) => prev,
   });
 
   const tasks = useQuery({
     queryKey: ['company-tasks', id],
-    queryFn: () => api.get<Page<Task>>(`/api/v1/tasks?pageSize=100&subjectType=company&subjectId=${encodeURIComponent(id)}`),
+    queryFn: () =>
+      api.get<Page<Task>>(
+        `/api/v1/tasks?pageSize=100&subjectType=company&subjectId=${encodeURIComponent(id)}`,
+      ),
     enabled: !!id && !!company.data,
     placeholderData: (prev) => prev,
   });
 
   const activities = useQuery({
     queryKey: ['company-activities', id],
-    queryFn: () => api.get<Page<Activity>>(`/api/v1/activities?pageSize=50&subjectType=company&subjectId=${encodeURIComponent(id)}`),
+    queryFn: () =>
+      api.get<Page<Activity>>(
+        `/api/v1/activities?pageSize=50&subjectType=company&subjectId=${encodeURIComponent(id)}`,
+      ),
     enabled: !!id && !!company.data,
     placeholderData: (prev) => prev,
   });
@@ -122,14 +137,18 @@ export function CompanyDetailPage() {
     return <p className="px-4 sm:px-8 py-6 text-sm text-ink-500">Cargando empresa…</p>;
   }
   if (company.isError || !company.data) {
-    return <p className="px-4 sm:px-8 py-6 text-sm text-signal-bad">No se pudo cargar la empresa.</p>;
+    return (
+      <p className="px-4 sm:px-8 py-6 text-sm text-signal-bad">No se pudo cargar la empresa.</p>
+    );
   }
 
   const c = company.data;
 
   return (
     <div className="px-4 sm:px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
-      <Link to="/companies" className="text-[12px] text-ink-500 hover:text-ink-800">← Empresas</Link>
+      <Link to="/companies" className="text-[12px] text-ink-500 hover:text-ink-800">
+        ← Empresas
+      </Link>
 
       {/* Identity header */}
       <header className="mt-2 flex items-start justify-between gap-4">
@@ -137,7 +156,9 @@ export function CompanyDetailPage() {
           <h1 className="text-2xl font-semibold text-ink-900 truncate">{c.name}</h1>
           <p className="text-sm text-ink-500 truncate">{c.website ?? c.domain ?? '—'}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>{c.status}</Badge>
+            <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>
+              {label(COMPANY_STATUS_LABEL, c.status)}
+            </Badge>
             {c.industry && <Badge tone="neutral">{c.industry}</Badge>}
             {c.country && <Badge tone="neutral">{c.country}</Badge>}
             {c.city && <Badge tone="neutral">{c.city}</Badge>}
@@ -151,10 +172,16 @@ export function CompanyDetailPage() {
       </header>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => setEditOpen(true)}>Editar</Button>
+        <Button variant="outline" onClick={() => setEditOpen(true)}>
+          Editar
+        </Button>
         <Button onClick={() => setDealModalOpen(true)}>Nueva oportunidad</Button>
-        <Button variant="accent" onClick={() => setContactModalOpen(true)}>Nueva persona</Button>
-        <Button variant="ghost" onClick={() => setTaskModalOpen(true)}>Nueva tarea</Button>
+        <Button variant="accent" onClick={() => setContactModalOpen(true)}>
+          Nueva persona
+        </Button>
+        <Button variant="ghost" onClick={() => setTaskModalOpen(true)}>
+          Nueva tarea
+        </Button>
       </div>
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -181,8 +208,12 @@ export function CompanyDetailPage() {
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Personas</h2>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-ink-500">{contacts.data?.items.length ?? 0} vinculadas</span>
-                <Button size="sm" variant="outline" onClick={() => setContactModalOpen(true)}>Nueva</Button>
+                <span className="text-[12px] text-ink-500">
+                  {contacts.data?.items.length ?? 0} vinculadas
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setContactModalOpen(true)}>
+                  Nueva
+                </Button>
               </div>
             </header>
             {contacts.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
@@ -204,7 +235,9 @@ export function CompanyDetailPage() {
                         </p>
                       </Link>
                     </div>
-                    <Badge tone={p.lifecycle === 'customer' ? 'ok' : 'neutral'}>{p.lifecycle}</Badge>
+                    <Badge tone={p.lifecycle === 'customer' ? 'ok' : 'neutral'}>
+                      {label(LIFECYCLE_LABEL, p.lifecycle)}
+                    </Badge>
                   </li>
                 ))}
               </ul>
@@ -216,8 +249,12 @@ export function CompanyDetailPage() {
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Oportunidades</h2>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-ink-500">{deals.data?.items.length ?? 0} en pipeline</span>
-                <Button size="sm" variant="outline" onClick={() => setDealModalOpen(true)}>Nueva</Button>
+                <span className="text-[12px] text-ink-500">
+                  {deals.data?.items.length ?? 0} en pipeline
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setDealModalOpen(true)}>
+                  Nueva
+                </Button>
               </div>
             </header>
             {deals.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
@@ -241,8 +278,10 @@ export function CompanyDetailPage() {
                       <p className="text-sm font-medium text-ink-900">
                         {formatMoney(d.valueMinor, d.currency)}
                       </p>
-                      <Badge tone={d.status === 'won' ? 'ok' : d.status === 'lost' ? 'bad' : 'neutral'}>
-                        {d.status}
+                      <Badge
+                        tone={d.status === 'won' ? 'ok' : d.status === 'lost' ? 'bad' : 'neutral'}
+                      >
+                        {label(DEAL_STATUS_LABEL, d.status)}
                       </Badge>
                     </div>
                   </li>
@@ -256,7 +295,9 @@ export function CompanyDetailPage() {
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Tareas</h2>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-ink-500">{tasks.data?.items.length ?? 0} abiertas</span>
+                <span className="text-[12px] text-ink-500">
+                  {tasks.data?.items.length ?? 0} abiertas
+                </span>
                 <Button size="sm" variant="outline" onClick={() => setTaskModalOpen(true)}>
                   Nueva tarea
                 </Button>
@@ -280,9 +321,13 @@ export function CompanyDetailPage() {
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
-                        : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
-                        : <Badge tone="neutral">{t.priority}</Badge>}
+                      {t.priority === 'urgent' ? (
+                        <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : t.priority === 'high' ? (
+                        <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : (
+                        <Badge tone="neutral">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      )}
                       {t.status === 'done' && <Badge tone="ok">Hecha</Badge>}
                     </div>
                   </li>
@@ -295,7 +340,9 @@ export function CompanyDetailPage() {
           <section className="card p-5">
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Actividad</h2>
-              <span className="text-[12px] text-ink-500">{activities.data?.items.length ?? 0} eventos</span>
+              <span className="text-[12px] text-ink-500">
+                {activities.data?.items.length ?? 0} eventos
+              </span>
             </header>
             {activities.isLoading ? (
               <p className="text-[12px] text-ink-500">Cargando…</p>
@@ -342,10 +389,17 @@ export function CompanyDetailPage() {
 function Row({ label, value, href }: { label: string; value: string; href?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-[11px] uppercase tracking-wide text-ink-500 font-medium shrink-0">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wide text-ink-500 font-medium shrink-0">
+        {label}
+      </dt>
       <dd className="text-ink-800 text-right truncate min-w-0">
         {href ? (
-          <a href={href} target="_blank" rel="noreferrer" className="text-accent-700 hover:underline truncate inline-block max-w-full">
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent-700 hover:underline truncate inline-block max-w-full"
+          >
             {value}
           </a>
         ) : (

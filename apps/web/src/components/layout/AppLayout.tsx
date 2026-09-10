@@ -25,14 +25,30 @@ function Icon({ name }: { name: IconName }) {
   switch (name) {
     case 'home':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M3 11l9-7 9 7" />
           <path d="M5 10v10h14V10" />
         </svg>
       );
     case 'people':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        >
           <circle cx="9" cy="9" r="3.5" />
           <path d="M2.5 20a6.5 6.5 0 0113 0" />
           <circle cx="17" cy="8" r="2.5" />
@@ -41,14 +57,28 @@ function Icon({ name }: { name: IconName }) {
       );
     case 'building':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        >
           <rect x="4" y="3" width="16" height="18" />
           <path d="M8 7h2M14 7h2M8 11h2M14 11h2M8 15h2M14 15h2M10 21v-3h4v3" />
         </svg>
       );
     case 'kanban':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        >
           <rect x="3" y="4" width="5" height="16" />
           <rect x="10" y="4" width="5" height="10" />
           <rect x="17" y="4" width="4" height="13" />
@@ -56,20 +86,43 @@ function Icon({ name }: { name: IconName }) {
       );
     case 'activity':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M3 12h4l2.5-6 4 12 2.5-6h5" />
         </svg>
       );
     case 'check':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        >
           <rect x="4" y="4" width="16" height="16" rx="2" />
           <path d="M9 12l2 2 4-4" />
         </svg>
       );
     case 'plug':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        >
           <path d="M9 3v4M15 3v4" />
           <rect x="7" y="7" width="10" height="6" />
           <path d="M12 13v3a4 4 0 01-4 4" />
@@ -77,7 +130,16 @@ function Icon({ name }: { name: IconName }) {
       );
     case 'mail':
       return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="3" y="5" width="18" height="14" rx="2" />
           <path d="M3 7l9 6 9-6" />
         </svg>
@@ -151,11 +213,25 @@ export function AppLayout() {
           onClick={() => setMobileOpen(true)}
           className="size-9 grid place-items-center rounded-md hover:bg-ink-100"
         >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          >
             <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
         </button>
-        <img src="/brand/departify-d-symbol.png" alt="" width={28} height={28} className="size-7 rounded-md" />
+        <img
+          src="/brand/departify-d-symbol.png"
+          alt=""
+          width={28}
+          height={28}
+          className="size-7 rounded-md"
+        />
         <span className="text-[14px] font-semibold text-ink-900">DEPARTIFY</span>
       </header>
 
@@ -176,12 +252,17 @@ export function AppLayout() {
           mobileOpen
             ? 'fixed top-0 left-0 bottom-0 w-[260px] translate-x-0'
             : 'fixed top-0 left-0 bottom-0 w-[260px] -translate-x-full',
-          'lg:static lg:translate-x-0 lg:flex lg:flex-col',
+          'lg:static lg:translate-x-0 lg:flex lg:flex-col lg:sticky lg:top-0 lg:h-dvh lg:self-start',
           asideWidth,
         )}
         aria-label="Navegación principal"
       >
-        <div className={clsx('px-5 py-5 flex items-center gap-2.5', desktopCollapsed && 'lg:justify-center lg:px-0')}>
+        <div
+          className={clsx(
+            'px-5 py-5 flex items-center gap-2.5',
+            desktopCollapsed && 'lg:justify-center lg:px-0',
+          )}
+        >
           <img
             src="/brand/departify-d-symbol.png"
             alt="DEPARTIFY"
@@ -197,7 +278,10 @@ export function AppLayout() {
           )}
         </div>
 
-        <nav className="px-3 py-2 flex-1 space-y-0.5" aria-label="Navegación principal">
+        <nav
+          className="px-3 py-2 flex-1 space-y-0.5 overflow-y-auto"
+          aria-label="Navegación principal"
+        >
           {primaryItems.map((it) => (
             <NavLink
               key={it.to}
@@ -218,7 +302,10 @@ export function AppLayout() {
             </NavLink>
           ))}
 
-          <div className={clsx('pt-2 mt-2 border-t border-ink-100', !showLabels && 'lg:pt-2')} role="separator" />
+          <div
+            className={clsx('pt-2 mt-2 border-t border-ink-100', !showLabels && 'lg:pt-2')}
+            role="separator"
+          />
           {toolItems.map((it) => (
             <NavLink
               key={it.to}
@@ -262,7 +349,9 @@ export function AppLayout() {
               )}
             </div>
           )}
-          <div className={clsx('flex', desktopCollapsed ? 'lg:flex-col lg:gap-1' : 'flex-col gap-1')}>
+          <div
+            className={clsx('flex', desktopCollapsed ? 'lg:flex-col lg:gap-1' : 'flex-col gap-1')}
+          >
             <button
               type="button"
               aria-label={desktopCollapsed ? 'Expandir menú' : 'Colapsar menú'}

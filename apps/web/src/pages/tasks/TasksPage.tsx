@@ -9,6 +9,7 @@ import { EmptyState } from '../../components/design-system/EmptyState';
 import { Badge } from '../../components/design-system/Badge';
 import { useToast } from '../../components/design-system/Toast';
 import { formatDate } from '../../lib/format';
+import { PRIORITY_LABEL, label } from '../../lib/labels';
 
 export interface Task {
   id: string;
@@ -53,17 +54,27 @@ export function TasksPage() {
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Tareas</p>
-          <h1 className="text-2xl font-semibold text-ink-900 mt-1">{overdue ? 'Vencidas' : 'Todas'}</h1>
+          <h1 className="text-2xl font-semibold text-ink-900 mt-1">
+            {overdue ? 'Vencidas' : 'Todas'}
+          </h1>
         </div>
-        <Button variant="accent" onClick={() => setCreateOpen(true)}>Nueva tarea</Button>
+        <Button variant="accent" onClick={() => setCreateOpen(true)}>
+          Nueva tarea
+        </Button>
       </header>
 
       {isLoading && <p className="text-sm text-ink-500">Cargando…</p>}
       {data && data.items.length === 0 && (
         <EmptyState
           title="No hay tareas"
-          description={overdue ? 'Nada vencido. Buen trabajo.' : 'Crea la primera para empezar a organizarte.'}
-          action={<Button variant="accent" onClick={() => setCreateOpen(true)}>Crear tarea</Button>}
+          description={
+            overdue ? 'Nada vencido. Buen trabajo.' : 'Crea la primera para empezar a organizarte.'
+          }
+          action={
+            <Button variant="accent" onClick={() => setCreateOpen(true)}>
+              Crear tarea
+            </Button>
+          }
         />
       )}
 
@@ -77,7 +88,9 @@ export function TasksPage() {
                   <th>Vence</th>
                   <th>Prioridad</th>
                   <th>Estado</th>
-                  <th className="w-32"><span className="sr-only">Acciones</span></th>
+                  <th className="w-32">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -85,22 +98,38 @@ export function TasksPage() {
                   <tr key={t.id}>
                     <td>
                       <p className="text-sm text-ink-900">{t.title}</p>
-                      {t.description && <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>}
+                      {t.description && (
+                        <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>
+                      )}
                     </td>
-                    <td className="text-[12px] text-ink-600">{t.dueAt ? formatDate(t.dueAt) : '—'}</td>
-                    <td>
-                      {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
-                        : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
-                        : <Badge tone="neutral">{t.priority}</Badge>}
+                    <td className="text-[12px] text-ink-600">
+                      {t.dueAt ? formatDate(t.dueAt) : '—'}
                     </td>
                     <td>
-                      {t.status === 'done' ? <Badge tone="ok">Hecha</Badge>
-                        : t.status === 'cancelled' ? <Badge tone="neutral">Cancelada</Badge>
-                        : <Badge tone="lime">Abierta</Badge>}
+                      {t.priority === 'urgent' ? (
+                        <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : t.priority === 'high' ? (
+                        <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : (
+                        <Badge tone="neutral">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      )}
+                    </td>
+                    <td>
+                      {t.status === 'done' ? (
+                        <Badge tone="ok">Hecha</Badge>
+                      ) : t.status === 'cancelled' ? (
+                        <Badge tone="neutral">Cancelada</Badge>
+                      ) : (
+                        <Badge tone="lime">Abierta</Badge>
+                      )}
                     </td>
                     <td className="text-right">
                       {t.status !== 'done' && (
-                        <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => update.mutate({ id: t.id, status: 'done' })}
+                        >
                           Marcar hecha
                         </Button>
                       )}
@@ -118,7 +147,11 @@ export function TasksPage() {
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-ink-900">{t.title}</p>
                   {t.status !== 'done' ? (
-                    <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => update.mutate({ id: t.id, status: 'done' })}
+                    >
                       Hecha
                     </Button>
                   ) : (
@@ -127,9 +160,13 @@ export function TasksPage() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-600">
                   {t.dueAt && <span>Vence {formatDate(t.dueAt)}</span>}
-                  {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
-                    : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
-                    : <Badge tone="neutral">{t.priority}</Badge>}
+                  {t.priority === 'urgent' ? (
+                    <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  ) : t.priority === 'high' ? (
+                    <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  ) : (
+                    <Badge tone="neutral">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  )}
                 </div>
               </li>
             ))}
@@ -183,7 +220,8 @@ export function CreateTaskModal({
       }
       toast.push({ tone: 'ok', title: 'Tarea creada' });
       onClose();
-      setTitle(''); setDueAt('');
+      setTitle('');
+      setDueAt('');
     },
   });
   return (
@@ -193,18 +231,37 @@ export function CreateTaskModal({
       title={subjectLabel ? `Nueva tarea · ${subjectLabel}` : 'Nueva tarea'}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="accent" onClick={() => create.mutate()} disabled={!title || create.isPending} loading={create.isPending}>Crear</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="accent"
+            onClick={() => create.mutate()}
+            disabled={!title || create.isPending}
+            loading={create.isPending}
+          >
+            Crear
+          </Button>
         </>
       }
     >
       <div className="space-y-3">
         {subjectLabel && (
-          <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">{subjectLabel}</p>
+          <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">
+            {subjectLabel}
+          </p>
         )}
-        <Field label="Título"><Input value={title} onChange={(e) => setTitle(e.target.value ?? '')} autoFocus /></Field>
+        <Field label="Título">
+          <Input value={title} onChange={(e) => setTitle(e.target.value ?? '')} autoFocus />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Vencimiento"><Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value ?? '')} /></Field>
+          <Field label="Vencimiento">
+            <Input
+              type="datetime-local"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value ?? '')}
+            />
+          </Field>
           <Field label="Prioridad">
             <select
               value={priority}

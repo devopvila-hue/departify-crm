@@ -10,6 +10,7 @@ import { Badge } from '../../components/design-system/Badge';
 import { SkeletonRows } from '../../components/design-system/Skeleton';
 import { useToast } from '../../components/design-system/Toast';
 import { formatShortDate, eur } from '../../lib/format';
+import { COMPANY_STATUS_LABEL, label } from '../../lib/labels';
 
 type SortKey = 'name' | 'created_at';
 type SortDir = 'asc' | 'desc';
@@ -91,10 +92,12 @@ export function CompaniesPage() {
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Empresas</p>
-          <h1 className="text-2xl font-semibold text-ink-900 mt-1">Cuentas</h1>
+          <h1 className="text-2xl font-semibold text-ink-900 mt-1">Empresas</h1>
           {total > 0 && <p className="text-[12px] text-ink-500 mt-0.5">{total} en total</p>}
         </div>
-        <Button variant="accent" onClick={() => setCreateOpen(true)}>Nueva empresa</Button>
+        <Button variant="accent" onClick={() => setCreateOpen(true)}>
+          Nueva empresa
+        </Button>
       </header>
 
       <div className="card p-3 mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
@@ -122,8 +125,12 @@ export function CompaniesPage() {
       {q.isError && !q.isLoading && (
         <div className="card p-6 text-center">
           <p className="text-sm text-signal-bad mb-2">No se pudieron cargar las empresas.</p>
-          <p className="text-[12px] text-ink-500 mb-3">{(q.error as Error)?.message ?? 'Error desconocido'}</p>
-          <Button variant="outline" onClick={() => q.refetch()} loading={q.isFetching}>Reintentar</Button>
+          <p className="text-[12px] text-ink-500 mb-3">
+            {(q.error as Error)?.message ?? 'Error desconocido'}
+          </p>
+          <Button variant="outline" onClick={() => q.refetch()} loading={q.isFetching}>
+            Reintentar
+          </Button>
         </div>
       )}
 
@@ -137,9 +144,14 @@ export function CompaniesPage() {
           }
           action={
             !hasFilters ? (
-              <Button variant="accent" onClick={() => setCreateOpen(true)}>Crear empresa</Button>
+              <Button variant="accent" onClick={() => setCreateOpen(true)}>
+                Crear empresa
+              </Button>
             ) : (
-              <Button variant="outline" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+              <Button
+                variant="outline"
+                onClick={() => setParams(new URLSearchParams(), { replace: true })}
+              >
                 Limpiar filtros
               </Button>
             )
@@ -155,7 +167,11 @@ export function CompaniesPage() {
               <thead>
                 <tr>
                   <th>
-                    <button type="button" onClick={() => toggleSort('name')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('name')}
+                      className="inline-flex items-center gap-1 hover:text-ink-900"
+                    >
                       Empresa <SortIndicator active={sort === 'name'} dir={order} />
                     </button>
                   </th>
@@ -165,11 +181,17 @@ export function CompaniesPage() {
                   <th className="text-right">Valor abierto</th>
                   <th>Estado</th>
                   <th className="hidden lg:table-cell">
-                    <button type="button" onClick={() => toggleSort('created_at')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('created_at')}
+                      className="inline-flex items-center gap-1 hover:text-ink-900"
+                    >
                       Creada <SortIndicator active={sort === 'created_at'} dir={order} />
                     </button>
                   </th>
-                  <th className="w-24"><span className="sr-only">Acciones</span></th>
+                  <th className="w-24">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -188,11 +210,17 @@ export function CompaniesPage() {
                       {c.dealsValueMinor ? eur.format(c.dealsValueMinor / 100) : '—'}
                     </td>
                     <td>
-                      <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>{c.status}</Badge>
+                      <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>
+                        {label(COMPANY_STATUS_LABEL, c.status)}
+                      </Badge>
                     </td>
-                    <td className="hidden lg:table-cell text-right text-[12px] text-ink-500">{formatShortDate(c.createdAt)}</td>
+                    <td className="hidden lg:table-cell text-right text-[12px] text-ink-500">
+                      {formatShortDate(c.createdAt)}
+                    </td>
                     <td className="text-right">
-                      <Button size="sm" variant="ghost" onClick={() => setEditTarget(c)}>Editar</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditTarget(c)}>
+                        Editar
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -209,22 +237,42 @@ export function CompaniesPage() {
                     <p className="text-sm font-medium text-ink-900 truncate">{c.name}</p>
                     {c.domain && <p className="text-[11px] text-ink-500 truncate">{c.domain}</p>}
                   </Link>
-                  <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>{c.status}</Badge>
+                  <Badge tone={c.status === 'active' ? 'ok' : 'neutral'}>
+                    {label(COMPANY_STATUS_LABEL, c.status)}
+                  </Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-600">
                   <span>{c.contactsCount ?? 0} personas</span>
                   <span>{c.dealsCount ?? 0} oportunidades</span>
-                  {c.dealsValueMinor ? <span className="money">{eur.format(c.dealsValueMinor / 100)}</span> : null}
+                  {c.dealsValueMinor ? (
+                    <span className="money">{eur.format(c.dealsValueMinor / 100)}</span>
+                  ) : null}
                 </div>
               </li>
             ))}
           </ul>
 
           <div className="flex items-center justify-between mt-3 text-[12px] text-ink-500">
-            <span>Página {page} de {totalPages}</span>
+            <span>
+              Página {page} de {totalPages}
+            </span>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setParam('page', String(page - 1))}>Anterior</Button>
-              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setParam('page', String(page + 1))}>Siguiente</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setParam('page', String(page - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setParam('page', String(page + 1))}
+              >
+                Siguiente
+              </Button>
             </div>
           </div>
         </>
@@ -250,13 +298,23 @@ export function CreateCompanyModal({ open, onClose }: { open: boolean; onClose: 
   const qc = useQueryClient();
   const toast = useToast();
   const create = useMutation({
-    mutationFn: () => api.post('/api/v1/companies', { name, domain: domain || undefined, industry: industry || undefined, country, city: city || undefined }),
+    mutationFn: () =>
+      api.post('/api/v1/companies', {
+        name,
+        domain: domain || undefined,
+        industry: industry || undefined,
+        country,
+        city: city || undefined,
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['companies'] });
       void qc.invalidateQueries({ queryKey: ['attention'] });
       toast.push({ tone: 'ok', title: 'Empresa creada', body: name });
       onClose();
-      setName(''); setDomain(''); setIndustry(''); setCity('');
+      setName('');
+      setDomain('');
+      setIndustry('');
+      setCity('');
     },
   });
   return (
@@ -266,8 +324,17 @@ export function CreateCompanyModal({ open, onClose }: { open: boolean; onClose: 
       title="Nueva empresa"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="accent" onClick={() => create.mutate()} disabled={!name || create.isPending} loading={create.isPending}>Crear</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="accent"
+            onClick={() => create.mutate()}
+            disabled={!name || create.isPending}
+            loading={create.isPending}
+          >
+            Crear
+          </Button>
         </>
       }
     >
@@ -319,8 +386,17 @@ export function EditCompanyModal({ company, onClose }: { company: Company; onClo
       title={`Editar ${company.name}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="accent" onClick={() => update.mutate()} disabled={!name || update.isPending} loading={update.isPending}>Guardar</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="accent"
+            onClick={() => update.mutate()}
+            disabled={!name || update.isPending}
+            loading={update.isPending}
+          >
+            Guardar
+          </Button>
         </>
       }
     >
@@ -354,11 +430,35 @@ function CompanyFields({
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <Field label="Nombre"><Input value={values.name ?? ''} onChange={(e) => onChange({ name: e.target.value })} autoFocus={autoFocus} /></Field>
-      <Field label="Dominio"><Input value={values.domain ?? ''} onChange={(e) => onChange({ domain: e.target.value })} placeholder="empresa.com" /></Field>
-      <Field label="Sector"><Input value={values.industry ?? ''} onChange={(e) => onChange({ industry: e.target.value })} /></Field>
-      <Field label="País"><Input value={values.country ?? ''} onChange={(e) => onChange({ country: e.target.value })} /></Field>
-      <Field label="Ciudad"><Input value={values.city ?? ''} onChange={(e) => onChange({ city: e.target.value })} /></Field>
+      <Field label="Nombre">
+        <Input
+          value={values.name ?? ''}
+          onChange={(e) => onChange({ name: e.target.value })}
+          autoFocus={autoFocus}
+        />
+      </Field>
+      <Field label="Dominio">
+        <Input
+          value={values.domain ?? ''}
+          onChange={(e) => onChange({ domain: e.target.value })}
+          placeholder="empresa.com"
+        />
+      </Field>
+      <Field label="Sector">
+        <Input
+          value={values.industry ?? ''}
+          onChange={(e) => onChange({ industry: e.target.value })}
+        />
+      </Field>
+      <Field label="País">
+        <Input
+          value={values.country ?? ''}
+          onChange={(e) => onChange({ country: e.target.value })}
+        />
+      </Field>
+      <Field label="Ciudad">
+        <Input value={values.city ?? ''} onChange={(e) => onChange({ city: e.target.value })} />
+      </Field>
       {showStatus && (
         <Field label="Estado">
           <select

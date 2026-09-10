@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { compactEur, eur, formatShortDate, relativeFromNow } from '../../lib/format';
+import { LIFECYCLE_LABEL, PRIORITY_LABEL, label } from '../../lib/labels';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { Badge } from '../../components/design-system/Badge';
 import { ActivityFeed, type ActivityItemData } from '../../components/crm/ActivityFeed';
@@ -9,11 +10,36 @@ import { SkeletonTiles } from '../../components/design-system/Skeleton';
 
 interface AttentionResponse {
   generatedAt: string;
-  summary: { openDeals: number; pipelineValueMinor: number; contactsTotal: number; companiesTotal: number; tasksOpen: number };
-  overdueTasks: Array<{ id: string; title: string; dueAt: string; priority: string; subjectType: string; subjectId: string }>;
+  summary: {
+    openDeals: number;
+    pipelineValueMinor: number;
+    contactsTotal: number;
+    companiesTotal: number;
+    tasksOpen: number;
+  };
+  overdueTasks: Array<{
+    id: string;
+    title: string;
+    dueAt: string;
+    priority: string;
+    subjectType: string;
+    subjectId: string;
+  }>;
   todayTasks: Array<{ id: string; title: string; dueAt: string; priority: string }>;
-  staleDeals: Array<{ id: string; name: string; valueMinor: number; currency: string; updatedAt: string }>;
-  recentContacts: Array<{ id: string; fullName: string; email: string; lifecycle: string; createdAt: string }>;
+  staleDeals: Array<{
+    id: string;
+    name: string;
+    valueMinor: number;
+    currency: string;
+    updatedAt: string;
+  }>;
+  recentContacts: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    lifecycle: string;
+    createdAt: string;
+  }>;
 }
 
 export function HomePage() {
@@ -42,7 +68,12 @@ export function HomePage() {
       </header>
 
       {isLoading && !data && <SkeletonTiles tiles={5} />}
-      {isError && <EmptyState title="No se pudo cargar la información" description="Comprueba tu sesión e inténtalo de nuevo." />}
+      {isError && (
+        <EmptyState
+          title="No se pudo cargar la información"
+          description="Comprueba tu sesión e inténtalo de nuevo."
+        />
+      )}
 
       {data && (
         <>
@@ -50,7 +81,10 @@ export function HomePage() {
               cleanly on mobile instead of orphaning a cell. */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
             <SummaryTile label="Pipeline abierto" value={data.summary.openDeals} />
-            <SummaryTile label="Valor en pipeline" value={compactEur.format(data.summary.pipelineValueMinor / 100)} />
+            <SummaryTile
+              label="Valor en pipeline"
+              value={compactEur.format(data.summary.pipelineValueMinor / 100)}
+            />
             <SummaryTile label="Contactos" value={data.summary.contactsTotal} />
             <SummaryTile label="Empresas" value={data.summary.companiesTotal} />
             <SummaryTile label="Tareas abiertas" value={data.summary.tasksOpen} mobileFull />
@@ -61,7 +95,9 @@ export function HomePage() {
             <section className="card p-5">
               <header className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-ink-900">Tareas vencidas</h2>
-                <Link to="/tasks?overdue=1" className="text-[12px] text-ink-600 hover:text-ink-900">Ver todas</Link>
+                <Link to="/tasks?overdue=1" className="text-[12px] text-ink-600 hover:text-ink-900">
+                  Ver todas
+                </Link>
               </header>
               {data.overdueTasks.length === 0 ? (
                 <p className="text-sm text-ink-500">Nada vencido. Buen trabajo.</p>
@@ -75,7 +111,11 @@ export function HomePage() {
                           Vencida {relativeFromNow(t.dueAt)} · {formatShortDate(t.dueAt)}
                         </p>
                       </div>
-                      {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge> : <Badge tone="warn">{t.priority}</Badge>}
+                      {t.priority === 'urgent' ? (
+                        <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : (
+                        <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -86,7 +126,9 @@ export function HomePage() {
             <section className="card p-5">
               <header className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-ink-900">Para hoy</h2>
-                <Link to="/tasks" className="text-[12px] text-ink-600 hover:text-ink-900">Ver todas</Link>
+                <Link to="/tasks" className="text-[12px] text-ink-600 hover:text-ink-900">
+                  Ver todas
+                </Link>
               </header>
               {data.todayTasks.length === 0 ? (
                 <p className="text-sm text-ink-500">Sin tareas para hoy.</p>
@@ -106,7 +148,9 @@ export function HomePage() {
             <section className="card p-5">
               <header className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-ink-900">Oportunidades estancadas</h2>
-                <Link to="/pipeline" className="text-[12px] text-ink-600 hover:text-ink-900">Ver pipeline</Link>
+                <Link to="/pipeline" className="text-[12px] text-ink-600 hover:text-ink-900">
+                  Ver pipeline
+                </Link>
               </header>
               {data.staleDeals.length === 0 ? (
                 <p className="text-sm text-ink-500">Nada estancado más de 14 días.</p>
@@ -116,9 +160,13 @@ export function HomePage() {
                     <li key={d.id} className="py-2.5 flex items-center justify-between gap-3">
                       <Link to={`/deals/${d.id}`} className="min-w-0 hover:underline">
                         <p className="text-sm text-ink-900 truncate">{d.name}</p>
-                        <p className="text-[11px] text-ink-500">Sin movimiento {relativeFromNow(d.updatedAt)}</p>
+                        <p className="text-[11px] text-ink-500">
+                          Sin movimiento {relativeFromNow(d.updatedAt)}
+                        </p>
                       </Link>
-                      <span className="money text-sm text-ink-800">{eur.format(d.valueMinor / 100)}</span>
+                      <span className="money text-sm text-ink-800">
+                        {eur.format(d.valueMinor / 100)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -129,7 +177,9 @@ export function HomePage() {
             <section className="card p-5">
               <header className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-ink-900">Contactos recientes</h2>
-                <Link to="/contacts" className="text-[12px] text-ink-600 hover:text-ink-900">Ver todos</Link>
+                <Link to="/contacts" className="text-[12px] text-ink-600 hover:text-ink-900">
+                  Ver todos
+                </Link>
               </header>
               {data.recentContacts.length === 0 ? (
                 <EmptyState
@@ -149,7 +199,7 @@ export function HomePage() {
                         <p className="text-sm text-ink-900 truncate">{c.fullName}</p>
                         <p className="text-[11px] text-ink-500 truncate">{c.email ?? '—'}</p>
                       </Link>
-                      <Badge tone="neutral">{c.lifecycle}</Badge>
+                      <Badge tone="neutral">{label(LIFECYCLE_LABEL, c.lifecycle)}</Badge>
                     </li>
                   ))}
                 </ul>
@@ -159,7 +209,9 @@ export function HomePage() {
             <section className="card p-5 lg:col-span-2">
               <header className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-ink-900">Última actividad</h2>
-                <Link to="/activity" className="text-[12px] text-ink-600 hover:text-ink-900">Ver todo</Link>
+                <Link to="/activity" className="text-[12px] text-ink-600 hover:text-ink-900">
+                  Ver todo
+                </Link>
               </header>
               {recentActivity ? (
                 <ActivityFeed items={recentActivity.items} emptyTitle="Todavía no hay actividad" />
@@ -174,7 +226,15 @@ export function HomePage() {
   );
 }
 
-function SummaryTile({ label, value, mobileFull }: { label: string; value: string | number; mobileFull?: boolean }) {
+function SummaryTile({
+  label,
+  value,
+  mobileFull,
+}: {
+  label: string;
+  value: string | number;
+  mobileFull?: boolean;
+}) {
   return (
     <div className={`card p-4 ${mobileFull ? 'col-span-2 md:col-span-1' : ''}`}>
       <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">{label}</p>

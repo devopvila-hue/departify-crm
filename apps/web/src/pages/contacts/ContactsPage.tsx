@@ -11,6 +11,7 @@ import { Avatar } from '../../components/design-system/Avatar';
 import { SkeletonRows } from '../../components/design-system/Skeleton';
 import { useToast } from '../../components/design-system/Toast';
 import { relativeFromNow } from '../../lib/format';
+import { LIFECYCLE_LABEL, label } from '../../lib/labels';
 
 export interface Contact {
   id: string;
@@ -56,8 +57,10 @@ export function ContactsPage() {
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Personas</p>
-          <h1 className="text-2xl font-semibold text-ink-900 mt-1">Contactos</h1>
-          {data && data.total > 0 && <p className="text-[12px] text-ink-500 mt-0.5">{data.total} en total</p>}
+          <h1 className="text-2xl font-semibold text-ink-900 mt-1">Personas</h1>
+          {data && data.total > 0 && (
+            <p className="text-[12px] text-ink-500 mt-0.5">{data.total} en total</p>
+          )}
         </div>
         <Button variant="accent" onClick={() => setCreateOpen(true)}>
           Nueva persona
@@ -84,15 +87,23 @@ export function ContactsPage() {
       {isError && !isLoading && (
         <div className="card p-6 text-center">
           <p className="text-sm text-signal-bad mb-2">No se pudo cargar la lista.</p>
-          <p className="text-[12px] text-ink-500 mb-3">{(error as ApiClientError)?.message ?? 'Error desconocido'}</p>
-          <Button variant="outline" onClick={() => refetch()} loading={isFetching}>Reintentar</Button>
+          <p className="text-[12px] text-ink-500 mb-3">
+            {(error as ApiClientError)?.message ?? 'Error desconocido'}
+          </p>
+          <Button variant="outline" onClick={() => refetch()} loading={isFetching}>
+            Reintentar
+          </Button>
         </div>
       )}
 
       {data && data.items.length === 0 && !isLoading && !isError && (
         <EmptyState
           title={search ? 'Sin resultados' : 'Aún no tienes personas'}
-          description={search ? 'Prueba con otro término o crea una nueva.' : 'Empieza creando tu primer contacto o importando un CSV.'}
+          description={
+            search
+              ? 'Prueba con otro término o crea una nueva.'
+              : 'Empieza creando tu primer contacto o importando un CSV.'
+          }
           action={
             <Button variant="accent" onClick={() => setCreateOpen(true)}>
               Crear persona
@@ -123,7 +134,9 @@ export function ContactsPage() {
                         <Avatar name={c.fullName} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-ink-900 truncate">{c.fullName}</p>
-                          {c.jobTitle && <p className="text-[11px] text-ink-500 truncate">{c.jobTitle}</p>}
+                          {c.jobTitle && (
+                            <p className="text-[11px] text-ink-500 truncate">{c.jobTitle}</p>
+                          )}
                         </div>
                       </Link>
                     </td>
@@ -138,11 +151,21 @@ export function ContactsPage() {
                     </td>
                     <td className="text-ink-700">{c.email ?? '—'}</td>
                     <td>
-                      <Badge tone={c.lifecycle === 'customer' ? 'ok' : c.lifecycle === 'prospect' ? 'lime' : 'neutral'}>
-                        {c.lifecycle}
+                      <Badge
+                        tone={
+                          c.lifecycle === 'customer'
+                            ? 'ok'
+                            : c.lifecycle === 'prospect'
+                              ? 'lime'
+                              : 'neutral'
+                        }
+                      >
+                        {label(LIFECYCLE_LABEL, c.lifecycle)}
                       </Badge>
                     </td>
-                    <td className="text-right text-[12px] text-ink-500">{relativeFromNow(c.lastActivityAt ?? c.updatedAt)}</td>
+                    <td className="text-right text-[12px] text-ink-500">
+                      {relativeFromNow(c.lastActivityAt ?? c.updatedAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -161,8 +184,16 @@ export function ContactsPage() {
                       {[c.jobTitle, c.companyName].filter(Boolean).join(' · ') || c.email || '—'}
                     </p>
                   </div>
-                  <Badge tone={c.lifecycle === 'customer' ? 'ok' : c.lifecycle === 'prospect' ? 'lime' : 'neutral'}>
-                    {c.lifecycle}
+                  <Badge
+                    tone={
+                      c.lifecycle === 'customer'
+                        ? 'ok'
+                        : c.lifecycle === 'prospect'
+                          ? 'lime'
+                          : 'neutral'
+                    }
+                  >
+                    {label(LIFECYCLE_LABEL, c.lifecycle)}
                   </Badge>
                 </Link>
               </li>
@@ -185,7 +216,9 @@ export function ContactsPage() {
           >
             Anterior
           </Button>
-          <span>Página {page} de {data.totalPages}</span>
+          <span>
+            Página {page} de {data.totalPages}
+          </span>
           <Button
             variant="outline"
             size="sm"
@@ -216,7 +249,13 @@ export interface CreateContactModalProps {
   extraInvalidateKeys?: ReadonlyArray<readonly unknown[]>;
 }
 
-export function CreateContactModal({ open, onClose, companyId, companyName, extraInvalidateKeys }: CreateContactModalProps) {
+export function CreateContactModal({
+  open,
+  onClose,
+  companyId,
+  companyName,
+  extraInvalidateKeys,
+}: CreateContactModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -230,13 +269,18 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
 
   const companies = useQuery({
     queryKey: ['companies-min', companyQuery],
-    queryFn: () => api.get<Page<CompanyLite>>(`/api/v1/companies?pageSize=10${companyQuery ? `&search=${encodeURIComponent(companyQuery)}` : ''}`),
+    queryFn: () =>
+      api.get<Page<CompanyLite>>(
+        `/api/v1/companies?pageSize=10${companyQuery ? `&search=${encodeURIComponent(companyQuery)}` : ''}`,
+      ),
     enabled: open && !companyId && forceShowCompany,
   });
   const [pickedCompanyId, setPickedCompanyId] = useState('');
 
   const effectiveCompanyId = companyId ?? pickedCompanyId;
-  const effectiveCompanyName = companyId ? companyName : companies.data?.items.find((c) => c.id === pickedCompanyId)?.name;
+  const effectiveCompanyName = companyId
+    ? companyName
+    : companies.data?.items.find((c) => c.id === pickedCompanyId)?.name;
 
   const create = useMutation({
     mutationFn: async () =>
@@ -251,7 +295,9 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
     onSuccess: async (res) => {
       toast.push({ tone: 'ok', title: 'Persona creada', body: fullName });
       if (note) {
-        await api.post('/api/v1/notes', { subjectType: 'contact', subjectId: res.id, body: note }).catch(() => undefined);
+        await api
+          .post('/api/v1/notes', { subjectType: 'contact', subjectId: res.id, body: note })
+          .catch(() => undefined);
       }
       void qc.invalidateQueries({ queryKey: ['contacts'] });
       void qc.invalidateQueries({ queryKey: ['attention'] });
@@ -259,7 +305,12 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
         void qc.invalidateQueries({ queryKey: key });
       }
       onClose();
-      setFullName(''); setEmail(''); setPhone(''); setJobTitle(''); setNote(''); setPickedCompanyId('');
+      setFullName('');
+      setEmail('');
+      setPhone('');
+      setJobTitle('');
+      setNote('');
+      setPickedCompanyId('');
     },
     onError: (err) => {
       const e = err as ApiClientError;
@@ -275,7 +326,9 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
       size="md"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
             variant="accent"
             onClick={() => create.mutate()}
@@ -316,12 +369,21 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
         {!companyId && (
           <div className="sm:col-span-2">
             {!forceShowCompany ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setForceShowCompany(true)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setForceShowCompany(true)}
+              >
                 + Vincular a una empresa
               </Button>
             ) : (
               <Field label="Empresa">
-                <Input placeholder="Buscar empresa…" value={companyQuery} onChange={(e) => setCompanyQuery(e.target.value)} />
+                <Input
+                  placeholder="Buscar empresa…"
+                  value={companyQuery}
+                  onChange={(e) => setCompanyQuery(e.target.value)}
+                />
                 <div className="mt-1 max-h-32 overflow-y-auto rounded-md border border-ink-200 divide-y divide-ink-100">
                   {(companies.data?.items ?? []).map((c) => (
                     <button
@@ -347,7 +409,11 @@ export function CreateContactModal({ open, onClose, companyId, companyName, extr
       </div>
       <div className="mt-3">
         <Field label="Nota inicial (opcional)">
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contexto, de dónde vino, qué habló…" />
+          <Textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Contexto, de dónde vino, qué habló…"
+          />
         </Field>
       </div>
     </Modal>
