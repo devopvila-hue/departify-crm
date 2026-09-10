@@ -4,6 +4,8 @@ import { api } from '../../lib/api';
 import { compactEur, eur, formatShortDate, relativeFromNow } from '../../lib/format';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { Badge } from '../../components/design-system/Badge';
+import { ActivityFeed, type ActivityItemData } from '../../components/crm/ActivityFeed';
+import { SkeletonTiles } from '../../components/design-system/Skeleton';
 
 interface AttentionResponse {
   generatedAt: string;
@@ -21,6 +23,12 @@ export function HomePage() {
     refetchInterval: 60_000,
   });
 
+  const { data: recentActivity } = useQuery({
+    queryKey: ['activities-recent'],
+    queryFn: () => api.get<{ items: ActivityItemData[] }>('/api/v1/activities?pageSize=6'),
+    refetchInterval: 60_000,
+  });
+
   return (
     <div className="px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
       <header className="flex items-end justify-between mb-6">
@@ -33,18 +41,19 @@ export function HomePage() {
         </div>
       </header>
 
-      {isLoading && <div className="text-sm text-ink-500">Cargando…</div>}
+      {isLoading && !data && <SkeletonTiles tiles={5} />}
       {isError && <EmptyState title="No se pudo cargar la información" description="Comprueba tu sesión e inténtalo de nuevo." />}
 
       {data && (
         <>
-          {/* Summary tiles — restrained, single row. */}
+          {/* Summary tiles — five operational numbers; the fifth wraps
+              cleanly on mobile instead of orphaning a cell. */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
             <SummaryTile label="Pipeline abierto" value={data.summary.openDeals} />
             <SummaryTile label="Valor en pipeline" value={compactEur.format(data.summary.pipelineValueMinor / 100)} />
             <SummaryTile label="Contactos" value={data.summary.contactsTotal} />
             <SummaryTile label="Empresas" value={data.summary.companiesTotal} />
-            <SummaryTile label="Tareas abiertas" value={data.summary.tasksOpen} />
+            <SummaryTile label="Tareas abiertas" value={data.summary.tasksOpen} mobileFull />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -146,6 +155,18 @@ export function HomePage() {
                 </ul>
               )}
             </section>
+            {/* Recent activity */}
+            <section className="card p-5 lg:col-span-2">
+              <header className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-ink-900">Última actividad</h2>
+                <Link to="/activity" className="text-[12px] text-ink-600 hover:text-ink-900">Ver todo</Link>
+              </header>
+              {recentActivity ? (
+                <ActivityFeed items={recentActivity.items} emptyTitle="Todavía no hay actividad" />
+              ) : (
+                <p className="text-[12px] text-ink-500">Cargando…</p>
+              )}
+            </section>
           </div>
         </>
       )}
@@ -153,9 +174,9 @@ export function HomePage() {
   );
 }
 
-function SummaryTile({ label, value }: { label: string; value: string | number }) {
+function SummaryTile({ label, value, mobileFull }: { label: string; value: string | number; mobileFull?: boolean }) {
   return (
-    <div className="card p-4">
+    <div className={`card p-4 ${mobileFull ? 'col-span-2 md:col-span-1' : ''}`}>
       <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-ink-900 num">{value}</p>
     </div>

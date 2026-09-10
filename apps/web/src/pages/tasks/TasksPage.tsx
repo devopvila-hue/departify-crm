@@ -68,47 +68,73 @@ export function TasksPage() {
       )}
 
       {data && data.items.length > 0 && (
-        <div className="card overflow-hidden">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Tarea</th>
-                <th>Vence</th>
-                <th>Prioridad</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <p className="text-sm text-ink-900">{t.title}</p>
-                    {t.description && <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>}
-                  </td>
-                  <td className="text-[12px] text-ink-600">{t.dueAt ? formatDate(t.dueAt) : '—'}</td>
-                  <td>
-                    {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
-                      : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
-                      : <Badge tone="neutral">{t.priority}</Badge>}
-                  </td>
-                  <td>
-                    {t.status === 'done' ? <Badge tone="ok">Hecha</Badge>
-                      : t.status === 'cancelled' ? <Badge tone="neutral">Cancelada</Badge>
-                      : <Badge tone="lime">Abierta</Badge>}
-                  </td>
-                  <td className="text-right">
-                    {t.status !== 'done' && (
-                      <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
-                        Marcar hecha
-                      </Button>
-                    )}
-                  </td>
+        <>
+          <div className="card overflow-hidden hidden md:block">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Tarea</th>
+                  <th>Vence</th>
+                  <th>Prioridad</th>
+                  <th>Estado</th>
+                  <th className="w-32"><span className="sr-only">Acciones</span></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.items.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <p className="text-sm text-ink-900">{t.title}</p>
+                      {t.description && <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>}
+                    </td>
+                    <td className="text-[12px] text-ink-600">{t.dueAt ? formatDate(t.dueAt) : '—'}</td>
+                    <td>
+                      {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
+                        : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
+                        : <Badge tone="neutral">{t.priority}</Badge>}
+                    </td>
+                    <td>
+                      {t.status === 'done' ? <Badge tone="ok">Hecha</Badge>
+                        : t.status === 'cancelled' ? <Badge tone="neutral">Cancelada</Badge>
+                        : <Badge tone="lime">Abierta</Badge>}
+                    </td>
+                    <td className="text-right">
+                      {t.status !== 'done' && (
+                        <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
+                          Marcar hecha
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: cards instead of an overflowing table. */}
+          <ul className="md:hidden space-y-2">
+            {data.items.map((t) => (
+              <li key={t.id} className="card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-ink-900">{t.title}</p>
+                  {t.status !== 'done' ? (
+                    <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
+                      Hecha
+                    </Button>
+                  ) : (
+                    <Badge tone="ok">Hecha</Badge>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-600">
+                  {t.dueAt && <span>Vence {formatDate(t.dueAt)}</span>}
+                  {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
+                    : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
+                    : <Badge tone="neutral">{t.priority}</Badge>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} />

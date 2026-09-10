@@ -1,11 +1,11 @@
 import { NavLink } from 'react-router-dom';
 
 const items = [
-  { to: '/email/senders', label: 'Senders', desc: 'Direcciones de envío y credenciales cifradas.' },
+  { to: '/email/senders', label: 'Remitentes', desc: 'Direcciones de envío y credenciales cifradas.' },
   { to: '/email/templates', label: 'Plantillas', desc: 'Plantillas con variables {{first_name}}.' },
   { to: '/email/sequences', label: 'Secuencias', desc: 'Builder con EMAIL / WAIT / CONDITIONAL / EXIT.' },
   { to: '/email/suppressions', label: 'Supresiones', desc: 'Lista de no-enviar (bounces, unsubscribes, manual).' },
-  { to: '/email/ai', label: 'AI Assistant', desc: 'Enriquecer, lead score, redactor de respuestas, radar de riesgos.' },
+  { to: '/email/ai', label: 'Asistente IA', desc: 'Enriquecer, lead score, redactor de respuestas, radar de riesgos.' },
 ] as const;
 
 export function EmailIndexPage() {
@@ -15,10 +15,10 @@ export function EmailIndexPage() {
         <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Email</p>
         <h1 className="text-2xl font-semibold text-ink-900 mt-1">Automatización de email</h1>
         <p className="text-sm text-ink-500 mt-1 max-w-xl">
-          Sprint 5 — providers (Resend, Brevo, fake), plantillas, secuencias con worker restart-safe, supresión y webhooks idempotentes.
+          Gestiona tus envíos, plantillas y secuencias de correo para que el seguimiento comercial no dependa de la memoria.
         </p>
       </header>
-      <ul className="grid grid-cols-2 gap-3">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {items.map((it) => (
           <li key={it.to}>
             <NavLink
