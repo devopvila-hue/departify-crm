@@ -5,8 +5,12 @@ import { api } from '../../lib/api';
 import { Badge } from '../../components/design-system/Badge';
 import { Button } from '../../components/design-system/Button';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import { formatDate, formatShortDate } from '../../lib/format';
+import { formatDate, formatShortDate, formatMoney } from '../../lib/format';
 import { CreateTaskModal } from '../tasks/TasksPage';
+import { CreateDealModal } from '../pipelines/PipelinePage';
+import { CreateContactModal } from '../contacts/ContactsPage';
+import { EditCompanyModal } from './CompaniesPage';
+import { ActivityFeed, type ActivityItemData } from '../../components/crm/ActivityFeed';
 
 interface Company {
   id: string;
@@ -55,7 +59,7 @@ interface Task {
 
 interface Activity {
   id: string;
-  type: 'note' | 'email' | 'call' | 'meeting' | 'task' | 'status_change' | 'deal_change' | 'sequence_event' | 'system_event';
+  type: ActivityItemData['type'];
   subjectType: 'contact' | 'company' | 'deal' | 'organization';
   subjectId: string;
   actorId: string | null;
@@ -76,6 +80,9 @@ interface Page<T> {
 export function CompanyDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [dealModalOpen, setDealModalOpen] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const company = useQuery({
     queryKey: ['company', id],
@@ -143,6 +150,13 @@ export function CompanyDetailPage() {
         </div>
       </header>
 
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => setEditOpen(true)}>Editar</Button>
+        <Button onClick={() => setDealModalOpen(true)}>Nueva oportunidad</Button>
+        <Button variant="accent" onClick={() => setContactModalOpen(true)}>Nueva persona</Button>
+        <Button variant="ghost" onClick={() => setTaskModalOpen(true)}>Nueva tarea</Button>
+      </div>
+
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Identity card */}
         <section className="card p-5">
@@ -166,7 +180,10 @@ export function CompanyDetailPage() {
           <section className="card p-5">
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Personas</h2>
-              <span className="text-[12px] text-ink-500">{contacts.data?.items.length ?? 0} vinculadas</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-ink-500">{contacts.data?.items.length ?? 0} vinculadas</span>
+                <Button size="sm" variant="outline" onClick={() => setContactModalOpen(true)}>Nueva</Button>
+              </div>
             </header>
             {contacts.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
             {contacts.data && contacts.data.items.length === 0 && (
@@ -198,7 +215,10 @@ export function CompanyDetailPage() {
           <section className="card p-5">
             <header className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Oportunidades</h2>
-              <span className="text-[12px] text-ink-500">{deals.data?.items.length ?? 0} en pipeline</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-ink-500">{deals.data?.items.length ?? 0} en pipeline</span>
+                <Button size="sm" variant="outline" onClick={() => setDealModalOpen(true)}>Nueva</Button>
+              </div>
             </header>
             {deals.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
             {deals.data && deals.data.items.length === 0 && (
@@ -277,28 +297,15 @@ export function CompanyDetailPage() {
               <h2 className="text-sm font-semibold text-ink-900">Actividad</h2>
               <span className="text-[12px] text-ink-500">{activities.data?.items.length ?? 0} eventos</span>
             </header>
-            {activities.isLoading && <p className="text-[12px] text-ink-500">Cargando…</p>}
-            {activities.data && activities.data.items.length === 0 && (
-              <EmptyState
-                title="Sin actividad reciente"
-                description="Aún no hay eventos registrados para esta empresa."
+            {activities.isLoading ? (
+              <p className="text-[12px] text-ink-500">Cargando…</p>
+            ) : (
+              <ActivityFeed
+                items={(activities.data?.items ?? []).map((a) => ({ ...a, subjectName: c.name }))}
+                showSubject={false}
+                emptyTitle="Sin actividad reciente"
+                emptyDescription="Aún no hay eventos registrados para esta empresa."
               />
-            )}
-            {activities.data && activities.data.items.length > 0 && (
-              <ul className="divide-y divide-ink-100">
-                {activities.data.items.map((a) => (
-                  <li key={a.id} className="py-2.5 flex items-start gap-3">
-                    <ActivityTypeBadge type={a.type} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-ink-900 truncate">{a.title}</p>
-                      {a.body && <p className="text-[12px] text-ink-500 line-clamp-2 mt-0.5">{a.body}</p>}
-                      <p className="text-[11px] text-ink-400 mt-0.5">
-                        {a.actorId ? 'Usuario' : 'Sistema'} · {formatShortDate(a.createdAt)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
             )}
           </section>
         </div>
@@ -312,6 +319,22 @@ export function CompanyDetailPage() {
         subjectLabel={c.name}
         extraInvalidateKeys={[['company-tasks', c.id]]}
       />
+      <CreateDealModal
+        open={dealModalOpen}
+        onClose={() => setDealModalOpen(false)}
+        companyId={c.id}
+        people={(contacts.data?.items ?? []).map((p) => ({ id: p.id, fullName: p.fullName }))}
+        subjectLabel={c.name}
+        extraInvalidateKeys={[['company-deals', c.id]]}
+      />
+      <CreateContactModal
+        open={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+        companyId={c.id}
+        companyName={c.name}
+        extraInvalidateKeys={[['company-contacts', c.id]]}
+      />
+      {editOpen && <EditCompanyModal company={c} onClose={() => setEditOpen(false)} />}
     </div>
   );
 }
@@ -331,32 +354,4 @@ function Row({ label, value, href }: { label: string; value: string; href?: stri
       </dd>
     </div>
   );
-}
-
-function formatMoney(minor: number, currency: string): string {
-  const major = (minor ?? 0) / 100;
-  try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(major);
-  } catch {
-    return `${major.toLocaleString('es-ES')} ${currency}`;
-  }
-}
-
-// re-export Button import marker (used by sibling commits if needed)
-void Button;
-
-function ActivityTypeBadge({ type }: { type: Activity['type'] }) {
-  const map: Record<Activity['type'], { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' | 'lime' }> = {
-    note: { label: 'Nota', tone: 'neutral' },
-    email: { label: 'Email', tone: 'lime' },
-    call: { label: 'Llamada', tone: 'lime' },
-    meeting: { label: 'Reunión', tone: 'lime' },
-    task: { label: 'Tarea', tone: 'neutral' },
-    status_change: { label: 'Estado', tone: 'warn' },
-    deal_change: { label: 'Deal', tone: 'ok' },
-    sequence_event: { label: 'Secuencia', tone: 'neutral' },
-    system_event: { label: 'Sistema', tone: 'neutral' },
-  };
-  const m = map[type] ?? { label: type, tone: 'neutral' };
-  return <Badge tone={m.tone}>{m.label}</Badge>;
 }
