@@ -8,6 +8,7 @@ import { CompaniesPage } from './pages/companies/CompaniesPage';
 import { CompanyDetailPage } from './pages/companies/CompanyDetailPage';
 import { PipelinePage } from './pages/pipelines/PipelinePage';
 import { DealDetailPage } from './pages/pipelines/DealDetailPage';
+import { ActivityPage } from './pages/activity/ActivityPage';
 import { TasksPage } from './pages/tasks/TasksPage';
 import { IntegrationsPage } from './pages/settings/IntegrationsPage';
 import { LoginPage, SignupPage } from './pages/auth/AuthPage';
@@ -46,6 +47,7 @@ const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'activity', element: <ActivityPage /> },
       { path: 'contacts', element: <ContactsPage /> },
       { path: 'contacts/:id', element: <ContactDetailPage /> },
       { path: 'companies', element: <CompaniesPage /> },

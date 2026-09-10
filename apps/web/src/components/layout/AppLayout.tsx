@@ -5,17 +5,21 @@ import { useAuth } from '../../lib/auth';
 import { useToast } from '../design-system/Toast';
 import { initials } from '../../lib/format';
 
-const items = [
-  { to: '/', label: 'Inicio', icon: 'home' },
-  { to: '/contacts', label: 'Contactos', icon: 'people' },
-  { to: '/companies', label: 'Empresas', icon: 'building' },
-  { to: '/pipeline', label: 'Pipeline', icon: 'kanban' },
-  { to: '/tasks', label: 'Tareas', icon: 'check' },
-  { to: '/email', label: 'Email', icon: 'mail' },
-  { to: '/settings/keys', label: 'Integraciones', icon: 'plug' },
+const primaryItems = [
+  { to: '/', label: 'Resumen', icon: 'home', end: true },
+  { to: '/pipeline', label: 'Pipeline', icon: 'kanban', end: false },
+  { to: '/companies', label: 'Empresas', icon: 'building', end: false },
+  { to: '/contacts', label: 'Personas', icon: 'people', end: false },
+  { to: '/activity', label: 'Actividad', icon: 'activity', end: false },
 ] as const;
 
-type IconName = (typeof items)[number]['icon'];
+const toolItems = [
+  { to: '/tasks', label: 'Tareas', icon: 'check', end: false },
+  { to: '/email', label: 'Email', icon: 'mail', end: false },
+  { to: '/settings/keys', label: 'Integraciones', icon: 'plug', end: false },
+] as const;
+
+type IconName = (typeof primaryItems)[number]['icon'] | (typeof toolItems)[number]['icon'];
 
 function Icon({ name }: { name: IconName }) {
   switch (name) {
@@ -48,6 +52,12 @@ function Icon({ name }: { name: IconName }) {
           <rect x="3" y="4" width="5" height="16" />
           <rect x="10" y="4" width="5" height="10" />
           <rect x="17" y="4" width="4" height="13" />
+        </svg>
+      );
+    case 'activity':
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 12h4l2.5-6 4 12 2.5-6h5" />
         </svg>
       );
     case 'check':
@@ -187,12 +197,33 @@ export function AppLayout() {
           )}
         </div>
 
-        <nav className="px-3 py-2 flex-1 space-y-0.5">
-          {items.map((it) => (
+        <nav className="px-3 py-2 flex-1 space-y-0.5" aria-label="Navegación principal">
+          {primaryItems.map((it) => (
             <NavLink
               key={it.to}
               to={it.to}
-              end={it.to === '/'}
+              end={it.end}
+              onClick={() => setMobileOpen(false)}
+              title={desktopCollapsed ? it.label : undefined}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-2.5 rounded-md text-sm',
+                  showLabels ? 'px-2.5 py-2' : 'lg:justify-center lg:size-9 lg:px-0',
+                  isActive ? 'bg-ink-100 text-ink-900 font-medium' : 'text-ink-700 hover:bg-ink-50',
+                )
+              }
+            >
+              <Icon name={it.icon} />
+              {showLabels && <span className="truncate">{it.label}</span>}
+            </NavLink>
+          ))}
+
+          <div className={clsx('pt-2 mt-2 border-t border-ink-100', !showLabels && 'lg:pt-2')} role="separator" />
+          {toolItems.map((it) => (
+            <NavLink
+              key={it.to}
+              to={it.to}
+              end={it.end}
               onClick={() => setMobileOpen(false)}
               title={desktopCollapsed ? it.label : undefined}
               className={({ isActive }) =>
