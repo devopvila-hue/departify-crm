@@ -147,10 +147,18 @@ export async function pipelineRoutes(app: FastifyInstance) {
       .where(eq(schema.stages.pipelineId, id))
       .orderBy(asc(schema.stages.position));
     const deals = await tenant.db
-      .select()
+      .select({
+        deal: schema.deals,
+        companyName: schema.companies.name,
+      })
       .from(schema.deals)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(and(eq(schema.deals.organizationId, tenant.organizationId), eq(schema.deals.pipelineId, id)));
-    return { pipeline, stages, deals };
+    return {
+      pipeline,
+      stages,
+      deals: deals.map((r) => ({ ...r.deal, companyName: r.companyName ?? null })),
+    };
   });
 
   // Ensure the org has at least one pipeline. Idempotent.

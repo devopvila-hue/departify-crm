@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { schema } from '@departify-crm/db';
 import { generateId, Prefixes, PaginationQuery, paginate, FilterBody } from '@departify-crm/shared';
 import { compileFilter } from '../../lib/filter.js';
@@ -80,7 +80,44 @@ export async function companyRoutes(app: FastifyInstance) {
     const countRow = await tenant.db.select({ count: sql<number>`count(*)::int` }).from(schema.companies).where(where);
     const count = countRow[0]?.count ?? 0;
     const items = await tenant.db.select().from(schema.companies).where(where).orderBy(orderBy).limit(q.pageSize).offset(offset);
-    return paginate(items, count, q);
+
+    // Attach per-company aggregates (contacts, open deals, open value) in
+    // one pass so the CRM list is operational, not a dead table.
+    const ids = items.map((c) => c.id);
+    const withAggregates = ids.length
+      ? await tenant.db
+          .select({
+            companyId: schema.contacts.companyId,
+            contactCount: sql<number>`count(distinct ${schema.contacts.id})::int`,
+          })
+          .from(schema.contacts)
+          .where(and(eq(schema.contacts.organizationId, tenant.organizationId), inArray(schema.contacts.companyId, ids)))
+          .groupBy(schema.contacts.companyId)
+      : [];
+    const dealAgg = ids.length
+      ? await tenant.db
+          .select({
+            companyId: schema.deals.companyId,
+            dealCount: sql<number>`count(*)::int`,
+            valueMinor: sql<number>`coalesce(sum(value_minor), 0)::int`,
+          })
+          .from(schema.deals)
+          .where(and(eq(schema.deals.organizationId, tenant.organizationId), eq(schema.deals.status, 'open'), inArray(schema.deals.companyId, ids)))
+          .groupBy(schema.deals.companyId)
+      : [];
+    const contactByCompany = new Map(withAggregates.map((r) => [r.companyId, r.contactCount]));
+    const dealByCompany = new Map(dealAgg.map((r) => [r.companyId, { count: r.dealCount, valueMinor: r.valueMinor }]));
+
+    return paginate(
+      items.map((c) => ({
+        ...c,
+        contactsCount: contactByCompany.get(c.id) ?? 0,
+        dealsCount: dealByCompany.get(c.id)?.count ?? 0,
+        dealsValueMinor: dealByCompany.get(c.id)?.valueMinor ?? 0,
+      })),
+      count,
+      q,
+    );
   });
 
   app.post('/companies', { preHandler: [requireRole('member')] }, async (req, reply) => {

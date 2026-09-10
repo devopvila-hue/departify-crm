@@ -47,6 +47,7 @@ const DealList = z.object({
   pipelineId: z.string().optional(),
   stageId: z.string().optional(),
   companyId: z.string().max(64).optional(),
+  contactId: z.string().max(64).optional(),
   status: z.enum(['open', 'won', 'lost', 'all']).default('open'),
   sort: z.enum(['created_at', 'updated_at', 'value_minor', 'expected_close_at']).default('updated_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
@@ -80,27 +81,63 @@ export async function dealRoutes(app: FastifyInstance) {
     })();
     const orderBy = q.order === 'asc' ? asc(orderCol) : desc(orderCol);
     const offset = (q.page - 1) * q.pageSize;
-    const countRow = await tenant.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.deals)
-      .where(where);
-    const count = countRow[0]?.count ?? 0;
-    const items = await tenant.db
-      .select({
-        deal: schema.deals,
-        stageName: schema.stages.name,
-      })
-      .from(schema.deals)
-      .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
-      .where(where)
-      .orderBy(orderBy)
-      .limit(q.pageSize)
-      .offset(offset);
-    return paginate(
-      items.map((r) => ({ ...r.deal, stageName: r.stageName })),
-      count,
-      q,
-    );
+
+    // List deals, optionally restricted to a contact (via deal_contacts)
+    // so a Person record can show its related opportunities.
+    let count: number;
+    let items: Array<Record<string, unknown>>;
+    if (q.contactId) {
+      const base = and(
+        eq(schema.dealContacts.organizationId, tenant.organizationId),
+        eq(schema.dealContacts.contactId, q.contactId),
+        eq(schema.deals.organizationId, tenant.organizationId),
+        q.status !== 'all' ? eq(schema.deals.status, q.status) : undefined,
+        ...(q.pipelineId ? [eq(schema.deals.pipelineId, q.pipelineId)] : []),
+        ...(q.stageId ? [eq(schema.deals.stageId, q.stageId)] : []),
+      );
+      const countRows = await tenant.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.deals)
+        .innerJoin(schema.dealContacts, and(eq(schema.dealContacts.dealId, schema.deals.id), eq(schema.dealContacts.organizationId, tenant.organizationId)))
+        .where(base!);
+      count = countRows[0]?.count ?? 0;
+      const rows = await tenant.db
+        .select({
+          deal: schema.deals,
+          stageName: schema.stages.name,
+          companyName: schema.companies.name,
+        })
+        .from(schema.deals)
+        .innerJoin(schema.dealContacts, and(eq(schema.dealContacts.dealId, schema.deals.id), eq(schema.dealContacts.organizationId, tenant.organizationId)))
+        .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
+        .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
+        .where(base!)
+        .orderBy(orderBy)
+        .limit(q.pageSize)
+        .offset(offset);
+      items = rows.map((r) => ({ ...r.deal, stageName: r.stageName, companyName: r.companyName ?? null }));
+    } else {
+      const countRow = await tenant.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.deals)
+        .where(where);
+      count = countRow[0]?.count ?? 0;
+      const rows = await tenant.db
+        .select({
+          deal: schema.deals,
+          stageName: schema.stages.name,
+          companyName: schema.companies.name,
+        })
+        .from(schema.deals)
+        .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
+        .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
+        .where(where)
+        .orderBy(orderBy)
+        .limit(q.pageSize)
+        .offset(offset);
+      items = rows.map((r) => ({ ...r.deal, stageName: r.stageName, companyName: r.companyName ?? null }));
+    }
+    return paginate(items, count, q);
   });
 
   app.post('/deals', { preHandler: [requireRole('member')] }, async (req, reply) => {

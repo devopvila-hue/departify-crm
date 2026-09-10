@@ -110,14 +110,22 @@ export async function contactRoutes(app: FastifyInstance) {
       .where(where);
     const count = countRow[0]?.count ?? 0;
     const items = await tenant.db
-      .select()
+      .select({
+        contact: schema.contacts,
+        companyName: schema.companies.name,
+      })
       .from(schema.contacts)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.contacts.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(where)
       .orderBy(orderBy)
       .limit(q.pageSize)
       .offset(offset);
 
-    return paginate(items, count, q);
+    return paginate(
+      items.map((r) => ({ ...r.contact, companyName: r.companyName ?? null })),
+      count,
+      q,
+    );
   });
 
   app.post('/contacts', { preHandler: [requireRole('member')] }, async (req, reply) => {
@@ -159,13 +167,17 @@ export async function contactRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const rows = await tenant.db
-      .select()
+      .select({
+        contact: schema.contacts,
+        companyName: schema.companies.name,
+      })
       .from(schema.contacts)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.contacts.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(and(eq(schema.contacts.organizationId, tenant.organizationId), eq(schema.contacts.id, id)))
       .limit(1);
     const row = rows[0];
     if (!row) throw notFound('Contact not found');
-    return row;
+    return { ...row.contact, companyName: row.companyName ?? null };
   });
 
   app.patch('/contacts/:id', { preHandler: [requireRole('member')] }, async (req) => {
