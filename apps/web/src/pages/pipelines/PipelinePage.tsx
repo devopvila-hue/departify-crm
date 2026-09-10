@@ -23,11 +23,14 @@ interface Deal {
   probability: number;
   expectedCloseAt: string | null;
   status: 'open' | 'won' | 'lost';
+  companyId?: string | null;
+  companyName?: string | null;
   updatedAt: string;
 }
 interface Kanban { pipeline: Pipeline; stages: Stage[]; deals: Deal[]; }
 
 export function PipelinePage() {
+  const qc = useQueryClient();
   const { data: pipelines } = useQuery({
     queryKey: ['pipelines'],
     queryFn: () => api.get<Pipeline[]>('/api/v1/pipelines'),
@@ -39,6 +42,16 @@ export function PipelinePage() {
     enabled: !!activeId,
   });
   const [createOpen, setCreateOpen] = useState(false);
+
+  const moveDeal = useMutation({
+    mutationFn: ({ dealId, stageId }: { dealId: string; stageId: string }) =>
+      api.post(`/api/v1/deals/${dealId}/move`, { stageId }),
+    onSuccess: () => {
+      // Optimistic: refetch the kanban instead of a full page reload.
+      void qc.invalidateQueries({ queryKey: ['kanban'] });
+      void qc.invalidateQueries({ queryKey: ['attention'] });
+    },
+  });
 
   useEffect(() => {
     if (!activeId && pipelines && pipelines.length > 0) {
@@ -91,8 +104,7 @@ export function PipelinePage() {
                   onDrop={async (e) => {
                     const dealId = e.dataTransfer.getData('text/deal-id');
                     if (dealId) {
-                      await api.post(`/api/v1/deals/${dealId}/move`, { stageId: stage.id });
-                      window.location.reload();
+                      await moveDeal.mutateAsync({ dealId, stageId: stage.id });
                     }
                   }}
                 >
@@ -144,6 +156,7 @@ function DealCard({ deal }: { deal: Deal }) {
       className="block bg-white rounded-md border border-ink-200 p-2.5 hover:shadow-card cursor-grab active:cursor-grabbing"
     >
       <p className="text-[13px] font-medium text-ink-900 truncate">{deal.name}</p>
+      {deal.companyName && <p className="text-[11px] text-ink-500 truncate">{deal.companyName}</p>}
       <p className="money text-[12px] text-ink-700 mt-0.5">{eur.format(deal.valueMinor / 100)}</p>
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-ink-500">
         <span>{relativeFromNow(deal.updatedAt)}</span>
