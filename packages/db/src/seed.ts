@@ -29,7 +29,11 @@ function hashPassword(p: string) {
 }
 
 async function reset() {
+  // The org delete cascades to every tenant-scoped row; the demo user
+  // must be removed explicitly (its email is unique and would block a
+  // re-seed) after the org rows are gone.
   await db.execute(sql`DELETE FROM organizations WHERE name = ${DEMO_ORG_NAME}`);
+  await db.execute(sql`DELETE FROM users WHERE email = ${DEMO_USER_EMAIL}`);
 }
 
 async function main() {
@@ -181,17 +185,33 @@ async function main() {
   }
 
   // --- Deals -----------------------------------------------------------
+  // Stagger deal creation across the past two weeks so the pipeline and
+  // the activity feed read like a real commercial operation.
+  const today = new Date();
+  const isoDays = (d: number) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + d);
+    return dt;
+  };
+
   const dealNames = [
     'Renovación contrato anual', 'Plan onboarding premium', 'Migración plataforma',
     'Integración con ERP', 'Plan marketing Q1', 'Auditoría de operaciones',
     'Lanzamiento producto', 'Formación equipo comercial',
   ];
+  const dealIds: string[] = [];
+  const dealCreatedAt: Date[] = [];
   for (let i = 0; i < 12; i++) {
     const stageIdx = Math.min(stageIds.length - 1, i % (stageIds.length - 1));
     const stageId = stageIds[stageIdx]!;
     const stageMeta = stageNames[stageIdx]!;
     const companyId = companyIds[i % companyIds.length]!;
     const id = generateId(Prefixes.deal);
+    dealIds.push(id);
+    // Stagger creation across the past two weeks so the pipeline and the
+    // activity feed read like a real commercial operation, not a seed run.
+    const created = isoDays(-((i % 12) + 1));
+    dealCreatedAt.push(created);
     await db.insert(s.deals).values({
       id,
       organizationId: orgId,
@@ -204,16 +224,12 @@ async function main() {
       currency: 'EUR',
       probability: stageMeta.prob,
       status: stageMeta.won ? 'won' : stageMeta.lost ? 'lost' : 'open',
+      createdAt: created,
+      updatedAt: created,
     });
   }
 
   // --- Tasks -----------------------------------------------------------
-  const today = new Date();
-  const isoDays = (d: number) => {
-    const dt = new Date(today);
-    dt.setDate(dt.getDate() + d);
-    return dt;
-  };
   const taskDefs = [
     { title: 'Llamar a Bodegas La Ribera', offset: 0, contact: 0 },
     { title: 'Revisar propuesta Estudio Norte', offset: 1, contact: 1 },
@@ -249,16 +265,86 @@ async function main() {
   });
 
   // --- Activity log ----------------------------------------------------
-  await db.insert(s.activities).values({
-    id: generateId(Prefixes.activity),
-    organizationId: orgId,
-    type: 'system_event',
-    subjectType: 'organization',
-    subjectId: orgId,
-    actorId: userId,
-    title: 'Organización DEMO creada',
-    body: 'Seed inicial con pipeline, contactos, empresas, tareas y tags.',
+  // A layered, chronological history so the Activity tab demonstrates the
+  // commercial memory: deals created, stage moves, emails, notes and a
+  // meeting — all on real records of this demo org.
+  const activityRows: Array<{
+    type: 'note' | 'email' | 'call' | 'meeting' | 'task' | 'status_change' | 'deal_change' | 'sequence_event' | 'system_event';
+    subjectType: 'contact' | 'company' | 'deal' | 'organization';
+    subjectId: string;
+    title: string;
+    body?: string;
+    createdAt: Date;
+  }> = [];
+
+  activityRows.push({
+    type: 'system_event', subjectType: 'organization', subjectId: orgId,
+    title: 'Organización DEMO creada', body: 'Seed inicial con pipeline, contactos, empresas, tareas y tags.',
+    createdAt: isoDays(-15),
   });
+
+  // Deal creation + later stage move for the first few deals.
+  for (let i = 0; i < dealIds.length; i++) {
+    const deal = dealNames[i % dealNames.length]!;
+    activityRows.push({
+      type: 'deal_change', subjectType: 'deal', subjectId: dealIds[i]!,
+      title: `Oportunidad creada: ${deal}`,
+      createdAt: dealCreatedAt[i]!,
+    });
+    // A few deals moved stage a couple of days later.
+    if (i % 4 === 0 && i < 10) {
+      const next = new Date(dealCreatedAt[i]!.getTime() + 2 * 86400_000);
+      if (next.getTime() < Date.now()) {
+        activityRows.push({
+          type: 'status_change', subjectType: 'deal', subjectId: dealIds[i]!,
+          title: `${deal} avanzó a Interesado`,
+          createdAt: next,
+        });
+      }
+    }
+  }
+
+  // Emails to the first contacts (sequence events, no real sends).
+  for (let i = 0; i < 5; i++) {
+    const c = contactIds[i * 3]!;
+    activityRows.push({
+      type: 'email', subjectType: 'contact', subjectId: c,
+      title: 'Email de seguimiento enviado',
+      body: 'Secuencia demo: primer mensaje de presentación.',
+      createdAt: isoDays(-(4 + i)),
+    });
+  }
+
+  // Notes on two companies and one contact.
+  activityRows.push({
+    type: 'note', subjectType: 'company', subjectId: companyIds[0]!,
+    title: 'Nota añadida', body: 'Hablamos de renovar el contrato anual en el Q1.',
+    createdAt: isoDays(-2),
+  });
+  activityRows.push({
+    type: 'note', subjectType: 'company', subjectId: companyIds[2]!,
+    title: 'Nota añadida', body: 'Piden presupuesto de onboarding para 20 empleados.',
+    createdAt: isoDays(-1),
+  });
+  activityRows.push({
+    type: 'meeting', subjectType: 'contact', subjectId: contactIds[4]!,
+    title: 'Demo agendada', body: 'Videollamada de preparación con Logística Litoral.',
+    createdAt: isoDays(-1),
+  });
+
+  for (const r of activityRows) {
+    await db.insert(s.activities).values({
+      id: generateId(Prefixes.activity),
+      organizationId: orgId,
+      type: r.type,
+      subjectType: r.subjectType,
+      subjectId: r.subjectId,
+      actorId: userId,
+      title: r.title,
+      body: r.body ?? null,
+      createdAt: r.createdAt,
+    });
+  }
 
   // --- One email sender in fake/provider-safe mode (no creds, no sends) -
   await db.insert(s.emailSenders).values({
