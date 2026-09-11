@@ -11,7 +11,7 @@
  */
 import { pgTable, text, jsonb, timestamp, integer, uuid, index, check, pgEnum } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { orgId } from './_helpers.js';
+import { organizations } from './organizations.js';
 
 export const rosaStateEnum = pgEnum('rosa_status', [
   'planned',
@@ -33,7 +33,9 @@ export const rosaState = pgTable(
   {
     rosaId: uuid('rosa_id').primaryKey().defaultRandom(),
     rosaVersion: text('rosa_version').notNull().default('0.1'),
-    orgId: orgId(),
+    orgId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
     workId: uuid('work_id').notNull(),
     objective: text('objective').notNull(),
     state: rosaStateEnum('state').notNull().default('planned'),
