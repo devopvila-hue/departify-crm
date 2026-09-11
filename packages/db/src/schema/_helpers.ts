@@ -1,17 +1,12 @@
-import { text, customType } from 'drizzle-orm/pg-core';
+import { text } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations.js';
 import { users } from './users.js';
 
-/**
- * `citext` custom type — case-insensitive text. Used for emails and
- * normalized identifiers where we want lookups to be case-insensitive
- * without forcing every caller to lower().
- */
-export const citext = customType<{ data: string; driverData: string }>({
-  dataType() {
-    return 'citext';
-  },
-});
+// Re-export citext from its leaf module so existing consumers that
+// import from `_helpers.js` keep working. The leaf lives in `_citext.ts`
+// to avoid the circular-init race that previously made `citext`
+// undefined when `users.ts` evaluated `citext('email')`.
+export { citext } from './_citext.js';
 
 /** Lazy references — Drizzle evaluates them at SQL generation time,
  * not at table-definition time, so circular imports are safe. */

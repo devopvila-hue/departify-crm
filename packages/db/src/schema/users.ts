@@ -7,7 +7,7 @@ import {
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations.js';
-import { citext } from './_helpers.js';
+import { citext } from './_citext.js';
 
 export const membershipRoleEnum = pgEnum('membership_role', ['owner', 'admin', 'member']);
 export const membershipStatusEnum = pgEnum('membership_status', ['active', 'invited', 'suspended']);

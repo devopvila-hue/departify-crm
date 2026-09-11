@@ -9,7 +9,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
-import { citext, orgId } from './_helpers.js';
+import { citext } from './_citext.js';
+import { orgId } from './_helpers.js';
 
 export const lifecycleEnum = pgEnum('contact_lifecycle', [
   'lead',
