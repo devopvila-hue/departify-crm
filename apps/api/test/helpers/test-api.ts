@@ -80,13 +80,14 @@ export async function startTestApi(databaseUrl: string): Promise<TestApi> {
     stderr += b.toString();
   });
   let exited: { code: number | null; signal: NodeJS.Signals | null } | null = null;
-  child.on('exit', (code, signal) => {
+  child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
     exited = { code, signal };
   });
 
   for (let i = 0; i < 120; i++) {
-    if (exited) {
-      throw new Error(`test API exited before serving (code=${exited.code} signal=${exited.signal})\n${stderr}`);
+    if (exited !== null) {
+      const result: { code: number | null; signal: NodeJS.Signals | null } = exited;
+      throw new Error(`test API exited before serving (code=${result.code} signal=${result.signal})\n${stderr}`);
     }
     try {
       const res = await fetch(`${baseUrl}/health`);

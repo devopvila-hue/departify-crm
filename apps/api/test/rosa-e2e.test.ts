@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { createDb, schema } from '@departify-crm/db';
+import { createDb } from '@departify-crm/db';
 import { config } from '../src/config.js';
 import { RosaService, RosaConflictError } from '../src/rosa/service.js';
 

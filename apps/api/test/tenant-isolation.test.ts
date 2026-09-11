@@ -13,7 +13,7 @@ import { createDb, schema } from '@departify-crm/db';
 import { generateId, Prefixes } from '@departify-crm/shared';
 import argon2 from 'argon2';
 import { randomToken, sha256 } from '../src/lib/crypto.js';
-import { startTestApi, resetSchema, type TestApi } from './helpers/test-api';
+import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/departify_crm_test';
 

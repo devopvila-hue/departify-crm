@@ -12,13 +12,13 @@
  *  7. Webhook: signature verification + idempotent message_event writes.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { sql, eq, and } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { createDb, schema } from '@departify-crm/db';
 import { generateId, Prefixes, renderEmail, previewContext, EmailMessage, EmailSendResult, EmailSendError } from '@departify-crm/shared';
 import { FakeProvider, ResendProvider, BrevoProvider } from '../src/email/providers.js';
 import { signUnsubToken, verifyUnsubToken } from '../src/email/unsubToken.js';
 import argon2 from 'argon2';
-import { startTestApi, resetSchema, type TestApi } from './helpers/test-api';
+import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
 import { createHmac } from 'node:crypto';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/departify_crm_test_email';
