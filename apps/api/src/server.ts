@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { sendError } from './errors.js';
 import { tenantPlugin } from './tenants/plugin.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { onboardingRoutes } from './modules/onboarding/routes.js';
 import { contactRoutes } from './modules/contacts/routes.js';
 import { companyRoutes } from './modules/companies/routes.js';
 import { pipelineRoutes } from './modules/pipelines/routes.js';
@@ -90,6 +91,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // --- API v1 ---------------------------------------------------------
   await app.register(async (v1) => {
     await v1.register(authRoutes, { prefix: '/api/v1' });
+    await v1.register(onboardingRoutes, { prefix: '/api/v1' });
     await v1.register(contactRoutes, { prefix: '/api/v1' });
     await v1.register(companyRoutes, { prefix: '/api/v1' });
     await v1.register(pipelineRoutes, { prefix: '/api/v1' });

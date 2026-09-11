@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { useAuth } from './lib/auth';
+import { OnboardingGate } from './components/OnboardingGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { HomePage } from './pages/home/HomePage';
 import { ContactsPage } from './pages/contacts/ContactsPage';
@@ -19,6 +20,7 @@ import { SequencesPage } from './pages/email/SequencesPage';
 import { EnrollmentsPage } from './pages/email/EnrollmentsPage';
 import { SuppressionsPage } from './pages/email/SuppressionsPage';
 import { AIAssistantPage } from './pages/email/AIAssistantPage';
+import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import type { ReactNode } from 'react';
 
 function Protected({ children }: { children: ReactNode }) {
@@ -38,11 +40,14 @@ function AnonOnly({ children }: { children: ReactNode }) {
 const router = createBrowserRouter([
   { path: '/login', element: <AnonOnly><LoginPage /></AnonOnly> },
   { path: '/signup', element: <AnonOnly><SignupPage /></AnonOnly> },
+  { path: '/onboarding', element: <Protected><OnboardingPage /></Protected> },
   {
     path: '/',
     element: (
       <Protected>
-        <AppLayout />
+        <OnboardingGate>
+          <AppLayout />
+        </OnboardingGate>
       </Protected>
     ),
     children: [
