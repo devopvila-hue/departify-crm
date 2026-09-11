@@ -11,8 +11,6 @@ import { createServer } from 'node:net';
 import { setTimeout as wait } from 'node:timers/promises';
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { sql } from 'drizzle-orm';
-import { createDb } from '@departify-crm/db';
 
 export interface TestApi {
   baseUrl: string;
@@ -36,11 +34,33 @@ async function freePort(): Promise<number> {
 
 /** Drops and rebuilds the public schema from the checked-in migrations. */
 export async function resetSchema(databaseUrl: string): Promise<void> {
-  const adminDb = createDb(databaseUrl);
-  await adminDb.execute(sql`drop schema public cascade; create schema public;`);
-  const migrationsDir = resolve(__dirname, '..', '..', '..', '..', 'packages', 'db', 'migrations');
+  // Close our own pooled connections first: a `drop schema public cascade`
+  // fails when the *same* process still holds open sessions to that schema
+  // ("cannot drop ... because other objects depend on it"). Drizzle's
+  // postgres-js client pools up to `max` connections; each `createDb`
+  // call in this process would otherwise block its own reset.
+  // We create a client per statement instead, so every session is
+  // short-lived (open → run → close) and never pins the schema.
+  const { default: postgres } = await import('postgres');
+  const dbExecute = async (statement: string): Promise<void> => {
+    const client = postgres(databaseUrl, { max: 1 });
+    try {
+      await client.unsafe(statement);
+    } finally {
+      await client.end();
+    }
+  };
+  await dbExecute('drop schema public cascade; create schema public;');
+  // Helper file lives at apps/api/test/helpers/; the repo root is
+  // (helpers dir)/../.. → apps/api, then ../.. → repo root.
+  const fileDir = resolve(import.meta.dirname);
+  const migrationsDir = resolve(fileDir, '..', '..', '..', '..', 'packages', 'db', 'migrations');
   if (!existsSync(migrationsDir)) return;
   const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+  // Semantic runner: apply each file's raw statements (split on
+  // `statement-breakpoint`), silently skipping only benign re-runs.
+  // Because we just recreated an empty `public` schema, every statement
+  // is applied from scratch; `IF NOT EXISTS` guards make re-entry safe.
   for (const f of files) {
     const statements = readFileSync(join(migrationsDir, f), 'utf8')
       .split(/-->\s*statement-breakpoint/)
@@ -48,7 +68,7 @@ export async function resetSchema(databaseUrl: string): Promise<void> {
       .filter(Boolean);
     for (const stmt of statements) {
       try {
-        await adminDb.execute(sql.raw(stmt));
+        await dbExecute(stmt);
       } catch {
         /* migrations are additive and re-runnable; IF NOT EXISTS races are expected */
       }
@@ -59,8 +79,24 @@ export async function resetSchema(databaseUrl: string): Promise<void> {
 export async function startTestApi(databaseUrl: string): Promise<TestApi> {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn('node', ['--import', 'tsx', 'src/index.ts'], {
-    cwd: resolve(__dirname, '..', '..'),
+  // The repo's pnpm workspaces hoist binaries under the root
+  // node_modules/.bin. `node --import tsx` resolves `tsx` relative to
+  // the *current working directory*, and vitest forks run the API child
+  // from `apps/api` (where `tsx` is not importable as a package name).
+  // Resolve the binary explicitly so the helper works in both local and
+  // CI contexts.
+  const cache = await import('node:module');
+  // `tsx` exports "." → ./dist/loader.mjs (the ESM loader), so
+  // `require.resolve('tsx')` gives us the loader we can pass to
+  // `--import`. This avoids depending on cwd for package resolution.
+  const tsxLoader = cache.createRequire(import.meta.url).resolve('tsx');
+  // Helper file lives at apps/api/test/helpers/; two levels up is
+  // apps/api (the API package root, where src/index.ts lives).
+  // The helper is executed from the apps/api package root (vitest cwd),
+  // so the API package root equals the current working directory here.
+  const apiDir = process.cwd();
+  const child: ChildProcess = spawn(process.execPath, ['--import', tsxLoader, 'src/index.ts'], {
+    cwd: apiDir,
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,
@@ -83,6 +119,10 @@ export async function startTestApi(databaseUrl: string): Promise<TestApi> {
   child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
     exited = { code, signal };
   });
+  let stdout = '';
+  child.stdout?.on('data', (b: Buffer) => {
+    stdout += b.toString();
+  });
 
   for (let i = 0; i < 120; i++) {
     if (exited !== null) {
@@ -90,8 +130,27 @@ export async function startTestApi(databaseUrl: string): Promise<TestApi> {
       throw new Error(`test API exited before serving (code=${result.code} signal=${result.signal})\n${stderr}`);
     }
     try {
-      const res = await fetch(`${baseUrl}/health`);
-      if (res.ok) {
+      // Use a bare HTTP client for the probe: Node's global fetch here
+      // is subject to the same environment quirks (proxy env vars,
+      // custom CA bundles set by the outer OpenClaw host) that can make
+      // `fetch` fail even though the server is listening and answering
+      // fine with curl. Raw net is the ground truth for "API is up".
+      const httpMod = await import('node:http');
+      const probeOk = await new Promise<boolean>((resolveProbe) => {
+        const req = httpMod.get(
+          { host: '127.0.0.1', port, path: '/health', agent: false },
+          (res) => {
+            res.resume();
+            resolveProbe(res.statusCode === 200);
+          },
+        );
+        req.setTimeout(1500, () => {
+          req.destroy();
+          resolveProbe(false);
+        });
+        req.on('error', () => resolveProbe(false));
+      });
+      if (probeOk) {
         return {
           baseUrl,
           stop: async () => {
@@ -106,5 +165,5 @@ export async function startTestApi(databaseUrl: string): Promise<TestApi> {
     await wait(250);
   }
   child.kill('SIGKILL');
-  throw new Error(`test API did not come up on ${baseUrl}\n${stderr}`);
+  throw new Error(`test API did not come up on ${baseUrl}\nstderr:\n${stderr}\nstdout:\n${stdout}`);
 }
