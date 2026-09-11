@@ -8,6 +8,8 @@
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { createDb, schema, type Database } from '@departify-crm/db';
+import { RosaService, RosaConflictError, RosaNotFoundError } from '../../rosa/service.js';
+import { mcpRosaCtx } from './rosa_hooks.js';
 import { config } from '../../config.js';
 import type { McpOrgContext } from '../auth.js';
 import { askForJson, llmConfigured, loadContactContext } from '../../ai/client.js';
@@ -86,15 +88,74 @@ export function registerAiTools(
     { contactId: z.string() },
     async (a) => {
       if (!llmConfigured()) return errOut('LLM_NOT_CONFIGURED');
-      const contactCtx = await loadContactContext(ctx.org.organizationId, a.contactId);
-      if (!contactCtx || !contactCtx.contact) return errOut('CONTACT_NOT_FOUND');
-      const summary = JSON.stringify({
-        contact: { name: [contactCtx.contact.firstName, contactCtx.contact.lastName].filter(Boolean).join(' '), jobTitle: contactCtx.contact.jobTitle, email: contactCtx.contact.email, companyId: contactCtx.contact.companyId },
-        recentActivities: contactCtx.recentActivities.slice(0, 8).map((a: typeof schema.activities.$inferSelect) => ({ type: a.type, title: a.title })),
-        openDeals: contactCtx.openDeals.map((d: typeof schema.deals.$inferSelect) => ({ name: d.name, valueMinor: d.valueMinor })),
-        recentMessages: contactCtx.recentMessages.slice(0, 10).map((m: typeof schema.messageEvents.$inferSelect) => ({ kind: m.kind })),
-      });
-      const result = await askForJson({ system: system(), user: `${SUMMARIZE_PROMPT}\n\n${summary}`, maxTokens: 600 });
+      const rosa = new RosaService(ctx.db);
+      const rosaCtx = mcpRosaCtx(ctx.org);
+      const workId = `ai_summarize_contact:${a.contactId}`;
+      const snapshot = await rosa.get(rosaCtx, workId);
+      let result: unknown;
+      let revision = snapshot?.revision ?? 0;
+      const completedIds = new Set((snapshot?.payload.completed ?? []).map((c: { id: string }) => c.id));
+      if (snapshot && completedIds.has('llm_call') && snapshot.payload.results?.[0]) {
+        result = (snapshot.payload.results[0] as { summary: string }).summary;
+      } else {
+        const contactCtx = await loadContactContext(ctx.org.organizationId, a.contactId);
+        if (!contactCtx || !contactCtx.contact) return errOut('CONTACT_NOT_FOUND');
+        const summary = JSON.stringify({
+          contact: { name: [contactCtx.contact.firstName, contactCtx.contact.lastName].filter(Boolean).join(' '), jobTitle: contactCtx.contact.jobTitle, email: contactCtx.contact.email, companyId: contactCtx.contact.companyId },
+          recentActivities: contactCtx.recentActivities.slice(0, 8).map((a: typeof schema.activities.$inferSelect) => ({ type: a.type, title: a.title })),
+          openDeals: contactCtx.openDeals.map((d: typeof schema.deals.$inferSelect) => ({ name: d.name, valueMinor: d.valueMinor })),
+          recentMessages: contactCtx.recentMessages.slice(0, 10).map((m: typeof schema.messageEvents.$inferSelect) => ({ kind: m.kind })),
+        });
+        result = await askForJson({ system: system(), user: `${SUMMARIZE_PROMPT}\n\n${summary}`, maxTokens: 600 });
+        if (!snapshot) {
+          const created = await rosa.create(rosaCtx, {
+            workId,
+            objective: `Summarize contact ${a.contactId}`,
+            state: 'in_progress',
+            payload: {
+              evidence_refs: [`departify://contact/${a.contactId}`],
+              pending: [
+                { id: 'llm_call', summary: 'Invoke LLM for contact summary' },
+                { id: 'writeback', summary: 'Persist summary to contacts.customValues' },
+              ],
+              next_action: { who: 'ai_summarize_contact', what: 'Run LLM call' },
+              verification: { criteria: ['llm_call.completed', 'writeback.completed', 'result.stored'], status: 'pending' },
+            },
+          });
+          revision = created.revision;
+        }
+        try {
+          const updated = await rosa.append(rosaCtx, workId, revision, 'completed', { id: 'llm_call', summary: 'LLM summary returned' });
+          revision = updated.revision;
+          await rosa.append(rosaCtx, workId, revision, 'results', { id: 'llm_result', summary: JSON.stringify(result) });
+          revision = (await rosa.get(rosaCtx, workId))!.revision;
+        } catch (e) {
+          if (!(e instanceof RosaConflictError)) throw e;
+        }
+      }
+      const cur = await rosa.get(rosaCtx, workId);
+      const completed = new Set((cur?.payload.completed ?? []).map((c: { id: string }) => c.id));
+      if (!completed.has('writeback')) {
+        try {
+          const db = createDb(config.DATABASE_URL);
+          await db
+            .update(schema.contacts)
+            .set({ customValues: { ai_summary: result, ai_summary_at: new Date().toISOString() } })
+            .where(and(eq(schema.contacts.organizationId, ctx.org.organizationId), eq(schema.contacts.id, a.contactId)));
+          const after = await rosa.append(rosaCtx, workId, cur!.revision, 'completed', { id: 'writeback', summary: 'Summary persisted to contacts.customValues' });
+          await rosa.transition(rosaCtx, workId, after.revision, 'awaiting_review');
+        } catch (e) {
+          if (e instanceof RosaConflictError || e instanceof RosaNotFoundError) {
+            // ignore: another writer beat us
+          } else {
+            throw e;
+          }
+        }
+      } else if (cur && cur.state !== 'complete') {
+        try {
+          await rosa.transition(rosaCtx, workId, cur.revision, 'complete');
+        } catch { /* ignore */ }
+      }
       return jsonOut(result);
     },
   );
