@@ -7,6 +7,7 @@ import { badRequest, notFound } from '../../errors.js';
 import { requireRole } from '../../tenants/plugin.js';
 import { audit } from '../../audit/log.js';
 import { recordActivity } from '../../activities/log.js';
+import { assertOwned, assertAllOwned } from '../../lib/ownership.js';
 
 const DealCreate = z.object({
   pipelineId: z.string().min(1),
@@ -45,6 +46,8 @@ const DealList = z.object({
   ...PaginationQuery.shape,
   pipelineId: z.string().optional(),
   stageId: z.string().optional(),
+  companyId: z.string().max(64).optional(),
+  contactId: z.string().max(64).optional(),
   status: z.enum(['open', 'won', 'lost', 'all']).default('open'),
   sort: z.enum(['created_at', 'updated_at', 'value_minor', 'expected_close_at']).default('updated_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
@@ -61,6 +64,7 @@ export async function dealRoutes(app: FastifyInstance) {
     const conds = [eq(schema.deals.organizationId, tenant.organizationId)];
     if (q.pipelineId) conds.push(eq(schema.deals.pipelineId, q.pipelineId));
     if (q.stageId) conds.push(eq(schema.deals.stageId, q.stageId));
+    if (q.companyId) conds.push(eq(schema.deals.companyId, q.companyId));
     if (q.status !== 'all') conds.push(eq(schema.deals.status, q.status));
     const where = and(...conds);
     const orderCol = (() => {
@@ -77,18 +81,62 @@ export async function dealRoutes(app: FastifyInstance) {
     })();
     const orderBy = q.order === 'asc' ? asc(orderCol) : desc(orderCol);
     const offset = (q.page - 1) * q.pageSize;
-    const countRow = await tenant.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.deals)
-      .where(where);
-    const count = countRow[0]?.count ?? 0;
-    const items = await tenant.db
-      .select()
-      .from(schema.deals)
-      .where(where)
-      .orderBy(orderBy)
-      .limit(q.pageSize)
-      .offset(offset);
+
+    // List deals, optionally restricted to a contact (via deal_contacts)
+    // so a Person record can show its related opportunities.
+    let count: number;
+    let items: Array<Record<string, unknown>>;
+    if (q.contactId) {
+      const base = and(
+        eq(schema.dealContacts.organizationId, tenant.organizationId),
+        eq(schema.dealContacts.contactId, q.contactId),
+        eq(schema.deals.organizationId, tenant.organizationId),
+        q.status !== 'all' ? eq(schema.deals.status, q.status) : undefined,
+        ...(q.pipelineId ? [eq(schema.deals.pipelineId, q.pipelineId)] : []),
+        ...(q.stageId ? [eq(schema.deals.stageId, q.stageId)] : []),
+      );
+      const countRows = await tenant.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.deals)
+        .innerJoin(schema.dealContacts, and(eq(schema.dealContacts.dealId, schema.deals.id), eq(schema.dealContacts.organizationId, tenant.organizationId)))
+        .where(base!);
+      count = countRows[0]?.count ?? 0;
+      const rows = await tenant.db
+        .select({
+          deal: schema.deals,
+          stageName: schema.stages.name,
+          companyName: schema.companies.name,
+        })
+        .from(schema.deals)
+        .innerJoin(schema.dealContacts, and(eq(schema.dealContacts.dealId, schema.deals.id), eq(schema.dealContacts.organizationId, tenant.organizationId)))
+        .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
+        .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
+        .where(base!)
+        .orderBy(orderBy)
+        .limit(q.pageSize)
+        .offset(offset);
+      items = rows.map((r) => ({ ...r.deal, stageName: r.stageName, companyName: r.companyName ?? null }));
+    } else {
+      const countRow = await tenant.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.deals)
+        .where(where);
+      count = countRow[0]?.count ?? 0;
+      const rows = await tenant.db
+        .select({
+          deal: schema.deals,
+          stageName: schema.stages.name,
+          companyName: schema.companies.name,
+        })
+        .from(schema.deals)
+        .leftJoin(schema.stages, eq(schema.stages.id, schema.deals.stageId))
+        .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
+        .where(where)
+        .orderBy(orderBy)
+        .limit(q.pageSize)
+        .offset(offset);
+      items = rows.map((r) => ({ ...r.deal, stageName: r.stageName, companyName: r.companyName ?? null }));
+    }
     return paginate(items, count, q);
   });
 
@@ -106,6 +154,8 @@ export async function dealRoutes(app: FastifyInstance) {
         .limit(1)
     )[0];
     if (!stage) throw badRequest('Stage does not belong to the given pipeline or organization');
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
+    await assertAllOwned(tenant, 'contact', body.contactIds);
 
     const id = generateId(Prefixes.deal);
     const valueMinor = Math.round(body.value * 100);
@@ -140,12 +190,17 @@ export async function dealRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const rows = await tenant.db
-      .select()
+      .select({
+        deal: schema.deals,
+        companyName: schema.companies.name,
+      })
       .from(schema.deals)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.deals.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(and(eq(schema.deals.organizationId, tenant.organizationId), eq(schema.deals.id, id)))
       .limit(1);
     if (!rows.length) throw notFound('Deal not found');
-    const deal = rows[0]!;
+    const row = rows[0]!;
+    const deal = row.deal;
     const contacts = await tenant.db
       .select({
         id: schema.contacts.id,
@@ -156,13 +211,14 @@ export async function dealRoutes(app: FastifyInstance) {
       .from(schema.dealContacts)
       .innerJoin(schema.contacts, eq(schema.contacts.id, schema.dealContacts.contactId))
       .where(eq(schema.dealContacts.dealId, id));
-    return { ...deal, contacts };
+    return { ...deal, companyName: row.companyName ?? null, contacts };
   });
 
   app.patch('/deals/:id', { preHandler: [requireRole('member')] }, async (req) => {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const parsed = DealUpdate.safeParse(req.body); if (!parsed.success) throw badRequest('Invalid body', { issues: parsed.error.flatten() }); const body = parsed.data;
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.value !== undefined) updates.valueMinor = Math.round(body.value * 100);
     for (const [k, v] of Object.entries(body)) {

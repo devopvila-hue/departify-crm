@@ -8,82 +8,28 @@
  * a resource owned by org B.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { spawn } from 'node:child_process';
-import { setTimeout as wait } from 'node:timers/promises';
-import { sql, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@departify-crm/db';
 import { generateId, Prefixes } from '@departify-crm/shared';
 import argon2 from 'argon2';
 import { randomToken, sha256 } from '../src/lib/crypto.js';
+import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
 
-const BASE_URL = process.env.TEST_API_URL ?? 'http://127.0.0.1:4100';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/departify_crm_test';
 
-let serverHandle: ReturnType<typeof spawn> | null = null;
+let api: TestApi | null = null;
+let BASE_URL = '';
 let started = false;
 
-async function waitForServer(): Promise<void> {
-  for (let i = 0; i < 60; i++) {
-    try {
-      const res = await fetch(`${BASE_URL}/health`);
-      if (res.ok) return;
-    } catch {
-      /* retry */
-    }
-    await wait(250);
-  }
-  throw new Error('test API did not come up');
-}
-
 beforeAll(async () => {
-  if (process.env.SKIP_SERVER === '1') {
-    started = true;
-    return;
-  }
-  // Wipe and re-migrate the test DB.
-  const adminDb = createDb(DATABASE_URL);
-  await adminDb.execute(sql`drop schema public cascade; create schema public;`);
-  // Apply the schema directly so the test doesn't depend on a separate
-  // migrate step. The migration file is the single source of truth.
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const migrationsDir = path.resolve(__dirname, '..', '..', '..', 'packages', 'db', 'migrations');
-  if (fs.existsSync(migrationsDir)) {
-    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
-    for (const f of files) {
-      const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
-      // drizzle-kit uses `-->` as a statement separator. Normalize to ';'.
-      const statements = sqlText.split(/-->\s*statement-breakpoint/).map((s) => s.trim()).filter(Boolean);
-      for (const stmt of statements) {
-        try { await adminDb.execute(sql.raw(stmt)); } catch (e) { /* ignore IF NOT EXISTS races */ }
-      }
-    }
-  }
-  serverHandle = spawn('node', ['--import', 'tsx', 'src/index.ts'], {
-    cwd: new URL('..', import.meta.url).pathname,
-    env: {
-      ...process.env,
-      DATABASE_URL,
-      PORT: '4100',
-      HOST: '127.0.0.1',
-      NODE_ENV: 'test',
-      SESSION_SECRET: 'a'.repeat(32),
-      ENCRYPTION_KEY: 'b'.repeat(32),
-      LOG_LEVEL: 'warn',
-      RATE_LIMIT_DEFAULT_MAX: '10000',
-    },
-    stdio: 'pipe',
-  });
-  serverHandle.stderr?.on('data', (b) => process.stderr.write(`[api] ${b}`));
-  await waitForServer();
+  await resetSchema(DATABASE_URL);
+  api = await startTestApi(DATABASE_URL);
+  BASE_URL = api.baseUrl;
   started = true;
 }, 60_000);
 
 afterAll(async () => {
-  if (serverHandle) {
-    serverHandle.kill('SIGTERM');
-    await wait(500);
-  }
+  await api?.stop();
 });
 
 interface SetupResult {

@@ -23,11 +23,14 @@ interface Deal {
   probability: number;
   expectedCloseAt: string | null;
   status: 'open' | 'won' | 'lost';
+  companyId?: string | null;
+  companyName?: string | null;
   updatedAt: string;
 }
 interface Kanban { pipeline: Pipeline; stages: Stage[]; deals: Deal[]; }
 
 export function PipelinePage() {
+  const qc = useQueryClient();
   const { data: pipelines } = useQuery({
     queryKey: ['pipelines'],
     queryFn: () => api.get<Pipeline[]>('/api/v1/pipelines'),
@@ -39,6 +42,16 @@ export function PipelinePage() {
     enabled: !!activeId,
   });
   const [createOpen, setCreateOpen] = useState(false);
+
+  const moveDeal = useMutation({
+    mutationFn: ({ dealId, stageId }: { dealId: string; stageId: string }) =>
+      api.post(`/api/v1/deals/${dealId}/move`, { stageId }),
+    onSuccess: () => {
+      // Optimistic: refetch the kanban instead of a full page reload.
+      void qc.invalidateQueries({ queryKey: ['kanban'] });
+      void qc.invalidateQueries({ queryKey: ['attention'] });
+    },
+  });
 
   useEffect(() => {
     if (!activeId && pipelines && pipelines.length > 0) {
@@ -91,8 +104,7 @@ export function PipelinePage() {
                   onDrop={async (e) => {
                     const dealId = e.dataTransfer.getData('text/deal-id');
                     if (dealId) {
-                      await api.post(`/api/v1/deals/${dealId}/move`, { stageId: stage.id });
-                      window.location.reload();
+                      await moveDeal.mutateAsync({ dealId, stageId: stage.id });
                     }
                   }}
                 >
@@ -144,6 +156,7 @@ function DealCard({ deal }: { deal: Deal }) {
       className="block bg-white rounded-md border border-ink-200 p-2.5 hover:shadow-card cursor-grab active:cursor-grabbing"
     >
       <p className="text-[13px] font-medium text-ink-900 truncate">{deal.name}</p>
+      {deal.companyName && <p className="text-[11px] text-ink-500 truncate">{deal.companyName}</p>}
       <p className="money text-[12px] text-ink-700 mt-0.5">{eur.format(deal.valueMinor / 100)}</p>
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-ink-500">
         <span>{relativeFromNow(deal.updatedAt)}</span>
@@ -153,18 +166,54 @@ function DealCard({ deal }: { deal: Deal }) {
   );
 }
 
-function CreateDealModal({ open, onClose, pipelineId }: { open: boolean; onClose: () => void; pipelineId: string | null }) {
+export interface CreateDealModalProps {
+  open: boolean;
+  onClose: () => void;
+  /** Omit to let the modal resolve (or provision) the workspace's default pipeline. */
+  pipelineId?: string | null;
+  /** Pre-links the deal to a company, e.g. when opened from a Company record. */
+  companyId?: string;
+  /** People offered as contacts on the deal — the company's, when opened from one. */
+  people?: Array<{ id: string; fullName: string }>;
+  /** Rendered above the form, e.g. "Acme S.L.". */
+  subjectLabel?: string;
+  /** Extra query keys to invalidate on success (e.g. ['company-deals', id]). */
+  extraInvalidateKeys?: ReadonlyArray<readonly unknown[]>;
+}
+
+export function CreateDealModal({
+  open,
+  onClose,
+  pipelineId,
+  companyId,
+  people,
+  subjectLabel,
+  extraInvalidateKeys,
+}: CreateDealModalProps) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  // A workspace that has never opened the Pipeline page has no pipeline
+  // yet. Provision the default one on demand so "Nuevo deal" is never a
+  // dead end. The endpoint is idempotent.
+  const ensured = useQuery({
+    queryKey: ['default-pipeline'],
+    queryFn: () => api.post<{ id: string }>('/api/v1/pipelines/ensure-default'),
+    enabled: open && !pipelineId,
+    staleTime: Infinity,
+  });
+  const activePipelineId = pipelineId ?? ensured.data?.id ?? null;
+
   const { data: kanban } = useQuery({
-    queryKey: ['kanban', pipelineId],
-    queryFn: () => api.get<Kanban>(`/api/v1/pipelines/${pipelineId}/kanban`),
-    enabled: !!pipelineId,
+    queryKey: ['kanban', activePipelineId],
+    queryFn: () => api.get<Kanban>(`/api/v1/pipelines/${activePipelineId}/kanban`),
+    enabled: !!activePipelineId,
   });
   const [name, setName] = useState('');
   const [value, setValue] = useState('0');
   const [stageId, setStageId] = useState('');
   const [closeDate, setCloseDate] = useState('');
-  const qc = useQueryClient();
-  const toast = useToast();
+  const [contactIds, setContactIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (kanban && !stageId) {
@@ -176,28 +225,37 @@ function CreateDealModal({ open, onClose, pipelineId }: { open: boolean; onClose
   const create = useMutation({
     mutationFn: () =>
       api.post('/api/v1/deals', {
-        pipelineId,
+        pipelineId: activePipelineId,
         stageId,
         name,
         value: Number(value) || 0,
         expectedCloseAt: closeDate ? new Date(closeDate).toISOString() : undefined,
+        ...(companyId ? { companyId } : {}),
+        ...(contactIds.length ? { contactIds } : {}),
       }),
     onSuccess: () => {
       toast.push({ tone: 'ok', title: 'Deal creado' });
       void qc.invalidateQueries({ queryKey: ['kanban'] });
+      void qc.invalidateQueries({ queryKey: ['deals'] });
+      for (const key of extraInvalidateKeys ?? []) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
       onClose();
-      setName(''); setValue('0'); setCloseDate('');
+      setName(''); setValue('0'); setCloseDate(''); setContactIds([]);
+    },
+    onError: (err: Error) => {
+      toast.push({ tone: 'bad', title: 'No se pudo crear el deal', body: err.message });
     },
   });
 
   const stages = useMemo(() => kanban?.stages ?? [], [kanban]);
-  const valid = !!pipelineId && !!stageId && !!name;
+  const valid = !!activePipelineId && !!stageId && !!name;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Nuevo deal"
+      title={subjectLabel ? `Nuevo deal · ${subjectLabel}` : 'Nuevo deal'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
@@ -228,6 +286,26 @@ function CreateDealModal({ open, onClose, pipelineId }: { open: boolean; onClose
             ))}
           </select>
         </Field>
+        {people && people.length > 0 && (
+          <Field label="Personas">
+            <div className="max-h-32 overflow-y-auto rounded-md border border-ink-200 divide-y divide-ink-100">
+              {people.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-ink-50">
+                  <input
+                    type="checkbox"
+                    checked={contactIds.includes(p.id)}
+                    onChange={(e) =>
+                      setContactIds((prev) =>
+                        e.target.checked ? [...prev, p.id] : prev.filter((id) => id !== p.id),
+                      )
+                    }
+                  />
+                  <span className="truncate">{p.fullName}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
+        )}
       </div>
     </Modal>
   );

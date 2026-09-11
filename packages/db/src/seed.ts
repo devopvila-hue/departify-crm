@@ -29,7 +29,11 @@ function hashPassword(p: string) {
 }
 
 async function reset() {
+  // The org delete cascades to every tenant-scoped row; the demo user
+  // must be removed explicitly (its email is unique and would block a
+  // re-seed) after the org rows are gone.
   await db.execute(sql`DELETE FROM organizations WHERE name = ${DEMO_ORG_NAME}`);
+  await db.execute(sql`DELETE FROM users WHERE email = ${DEMO_USER_EMAIL}`);
 }
 
 async function main() {
@@ -101,14 +105,62 @@ async function main() {
 
   // --- Companies -------------------------------------------------------
   const companies = [
-    { name: 'Bodegas La Ribera', domain: 'bodegaslaribera.test', country: 'ES', city: 'Logroño', industry: 'Alimentación' },
-    { name: 'Estudio Norte', domain: 'estudionorte.test', country: 'ES', city: 'Bilbao', industry: 'Diseño' },
-    { name: 'Clínica Buenavista', domain: 'clinicabuenavista.test', country: 'ES', city: 'Madrid', industry: 'Salud' },
-    { name: 'Cárnicas del Sur', domain: 'carnicasdelsur.test', country: 'ES', city: 'Sevilla', industry: 'Alimentación' },
-    { name: 'Logística Litoral', domain: 'logisticalitoral.test', country: 'ES', city: 'Valencia', industry: 'Logística' },
-    { name: 'Editorial Verbena', domain: 'editorialverbena.test', country: 'ES', city: 'Barcelona', industry: 'Editorial' },
-    { name: 'Talleres Pueblo', domain: 'tallerespueblo.test', country: 'ES', city: 'Zaragoza', industry: 'Industrial' },
-    { name: 'Hotel Mirador', domain: 'hotelmirador.test', country: 'ES', city: 'Granada', industry: 'Hostelería' },
+    {
+      name: 'Bodegas La Ribera',
+      domain: 'bodegaslaribera.test',
+      country: 'ES',
+      city: 'Logroño',
+      industry: 'Alimentación',
+    },
+    {
+      name: 'Estudio Norte',
+      domain: 'estudionorte.test',
+      country: 'ES',
+      city: 'Bilbao',
+      industry: 'Diseño',
+    },
+    {
+      name: 'Clínica Buenavista',
+      domain: 'clinicabuenavista.test',
+      country: 'ES',
+      city: 'Madrid',
+      industry: 'Salud',
+    },
+    {
+      name: 'Cárnicas del Sur',
+      domain: 'carnicasdelsur.test',
+      country: 'ES',
+      city: 'Sevilla',
+      industry: 'Alimentación',
+    },
+    {
+      name: 'Logística Litoral',
+      domain: 'logisticalitoral.test',
+      country: 'ES',
+      city: 'Valencia',
+      industry: 'Logística',
+    },
+    {
+      name: 'Editorial Verbena',
+      domain: 'editorialverbena.test',
+      country: 'ES',
+      city: 'Barcelona',
+      industry: 'Editorial',
+    },
+    {
+      name: 'Talleres Pueblo',
+      domain: 'tallerespueblo.test',
+      country: 'ES',
+      city: 'Zaragoza',
+      industry: 'Industrial',
+    },
+    {
+      name: 'Hotel Mirador',
+      domain: 'hotelmirador.test',
+      country: 'ES',
+      city: 'Granada',
+      industry: 'Hostelería',
+    },
   ];
   const companyIds: string[] = [];
   for (const c of companies) {
@@ -129,12 +181,39 @@ async function main() {
   }
 
   // --- Contacts --------------------------------------------------------
+  // Shared "today" anchor: creation/activity dates are staggered across
+  // the past weeks so lists, pipeline and feed read like a real operation.
+  const today = new Date();
+  const isoDays = (d: number) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + d);
+    return dt;
+  };
   const firstNames = [
-    'Lucía', 'Mateo', 'Sofía', 'Hugo', 'Valeria', 'Martín', 'Camila', 'Lucas',
-    'Martina', 'Leo', 'Emma', 'Daniel', 'Alba', 'Diego', 'Noa', 'Pablo',
+    'Lucía',
+    'Mateo',
+    'Sofía',
+    'Hugo',
+    'Valeria',
+    'Martín',
+    'Camila',
+    'Lucas',
+    'Martina',
+    'Leo',
+    'Emma',
+    'Daniel',
+    'Alba',
+    'Diego',
+    'Noa',
+    'Pablo',
   ];
   const lastNames = ['Vidal', 'Reyes', 'Castro', 'Domínguez', 'Pardo', 'Sanz', 'Iglesias', 'Mora'];
-  const lifecycles: Array<'lead' | 'prospect' | 'customer' | 'partner'> = ['lead', 'prospect', 'customer', 'partner'];
+  const lifecycles: Array<'lead' | 'prospect' | 'customer' | 'partner'> = [
+    'lead',
+    'prospect',
+    'customer',
+    'partner',
+  ];
   const contactIds: string[] = [];
   for (let i = 0; i < 28; i++) {
     const id = generateId(Prefixes.contact);
@@ -142,6 +221,10 @@ async function main() {
     const fn = firstNames[i % firstNames.length]!;
     const ln = lastNames[(i * 3) % lastNames.length]!;
     const company = companyIds[i % companyIds.length] ?? null;
+    // Stagger creation and last activity so the list reads like a real
+    // book of contacts (not 28 rows stamped with the same minute).
+    const createdAt = isoDays(-((i % 21) + 1));
+    const lastActivityAt = isoDays(-(i % 9));
     await db.insert(s.contacts).values({
       id,
       organizationId: orgId,
@@ -150,11 +233,20 @@ async function main() {
       fullName: `${fn} ${ln}`,
       email: `contact-${i.toString().padStart(2, '0')}@example.test`,
       phone: `+34 6${(10_000_000 + i).toString().slice(0, 8)}`,
-      jobTitle: ['Director General', 'Responsable de operaciones', 'CFO', 'CMO', 'Head of IT'][(i * 2) % 5]!,
+      jobTitle: [
+        'Director General',
+        'Responsable de operaciones',
+        'Dirección financiera',
+        'Dirección de marketing',
+        'Responsable de sistemas',
+      ][(i * 2) % 5]!,
       companyId: company!,
       lifecycle: lifecycles[i % lifecycles.length]!,
       source: ['web', 'referral', 'event', 'cold-outreach'][i % 4]!,
       ownerId: userId,
+      createdAt,
+      updatedAt: createdAt,
+      lastActivityAt,
     });
   }
 
@@ -182,16 +274,32 @@ async function main() {
 
   // --- Deals -----------------------------------------------------------
   const dealNames = [
-    'Renovación contrato anual', 'Plan onboarding premium', 'Migración plataforma',
-    'Integración con ERP', 'Plan marketing Q1', 'Auditoría de operaciones',
-    'Lanzamiento producto', 'Formación equipo comercial',
+    'Renovación contrato anual',
+    'Plan onboarding premium',
+    'Migración plataforma',
+    'Integración con ERP',
+    'Plan marketing Q1',
+    'Auditoría de operaciones',
+    'Lanzamiento producto',
+    'Formación equipo comercial',
+    'Ampliación de licencias',
+    'Consultoría de procesos',
+    'Soporte premium anual',
+    'Piloto departamento ventas',
   ];
+  const dealIds: string[] = [];
+  const dealCreatedAt: Date[] = [];
   for (let i = 0; i < 12; i++) {
     const stageIdx = Math.min(stageIds.length - 1, i % (stageIds.length - 1));
     const stageId = stageIds[stageIdx]!;
     const stageMeta = stageNames[stageIdx]!;
     const companyId = companyIds[i % companyIds.length]!;
     const id = generateId(Prefixes.deal);
+    dealIds.push(id);
+    // Stagger creation across the past two weeks so the pipeline and the
+    // activity feed read like a real commercial operation, not a seed run.
+    const created = isoDays(-((i % 12) + 1));
+    dealCreatedAt.push(created);
     await db.insert(s.deals).values({
       id,
       organizationId: orgId,
@@ -204,16 +312,12 @@ async function main() {
       currency: 'EUR',
       probability: stageMeta.prob,
       status: stageMeta.won ? 'won' : stageMeta.lost ? 'lost' : 'open',
+      createdAt: created,
+      updatedAt: created,
     });
   }
 
   // --- Tasks -----------------------------------------------------------
-  const today = new Date();
-  const isoDays = (d: number) => {
-    const dt = new Date(today);
-    dt.setDate(dt.getDate() + d);
-    return dt;
-  };
   const taskDefs = [
     { title: 'Llamar a Bodegas La Ribera', offset: 0, contact: 0 },
     { title: 'Revisar propuesta Estudio Norte', offset: 1, contact: 1 },
@@ -249,16 +353,113 @@ async function main() {
   });
 
   // --- Activity log ----------------------------------------------------
-  await db.insert(s.activities).values({
-    id: generateId(Prefixes.activity),
-    organizationId: orgId,
+  // A layered, chronological history so the Activity tab demonstrates the
+  // commercial memory: deals created, stage moves, emails, notes and a
+  // meeting — all on real records of this demo org.
+  const activityRows: Array<{
+    type:
+      | 'note'
+      | 'email'
+      | 'call'
+      | 'meeting'
+      | 'task'
+      | 'status_change'
+      | 'deal_change'
+      | 'sequence_event'
+      | 'system_event';
+    subjectType: 'contact' | 'company' | 'deal' | 'organization';
+    subjectId: string;
+    title: string;
+    body?: string;
+    createdAt: Date;
+  }> = [];
+
+  activityRows.push({
     type: 'system_event',
     subjectType: 'organization',
     subjectId: orgId,
-    actorId: userId,
     title: 'Organización DEMO creada',
     body: 'Seed inicial con pipeline, contactos, empresas, tareas y tags.',
+    createdAt: isoDays(-15),
   });
+
+  // Deal creation + later stage move for the first few deals.
+  for (let i = 0; i < dealIds.length; i++) {
+    const deal = dealNames[i % dealNames.length]!;
+    activityRows.push({
+      type: 'deal_change',
+      subjectType: 'deal',
+      subjectId: dealIds[i]!,
+      title: `Oportunidad creada: ${deal}`,
+      createdAt: dealCreatedAt[i]!,
+    });
+    // A few deals moved stage a couple of days later.
+    if (i % 4 === 0 && i < 10) {
+      const next = new Date(dealCreatedAt[i]!.getTime() + 2 * 86400_000);
+      if (next.getTime() < Date.now()) {
+        activityRows.push({
+          type: 'status_change',
+          subjectType: 'deal',
+          subjectId: dealIds[i]!,
+          title: `${deal} avanzó a Interesado`,
+          createdAt: next,
+        });
+      }
+    }
+  }
+
+  // Emails to the first contacts (sequence events, no real sends).
+  for (let i = 0; i < 5; i++) {
+    const c = contactIds[i * 3]!;
+    activityRows.push({
+      type: 'email',
+      subjectType: 'contact',
+      subjectId: c,
+      title: 'Email de seguimiento enviado',
+      body: 'Secuencia demo: primer mensaje de presentación.',
+      createdAt: isoDays(-(4 + i)),
+    });
+  }
+
+  // Notes on two companies and one contact.
+  activityRows.push({
+    type: 'note',
+    subjectType: 'company',
+    subjectId: companyIds[0]!,
+    title: 'Nota añadida',
+    body: 'Hablamos de renovar el contrato anual en el Q1.',
+    createdAt: isoDays(-2),
+  });
+  activityRows.push({
+    type: 'note',
+    subjectType: 'company',
+    subjectId: companyIds[2]!,
+    title: 'Nota añadida',
+    body: 'Piden presupuesto de onboarding para 20 empleados.',
+    createdAt: isoDays(-1),
+  });
+  activityRows.push({
+    type: 'meeting',
+    subjectType: 'contact',
+    subjectId: contactIds[4]!,
+    title: 'Demo agendada',
+    body: 'Videollamada de preparación con Logística Litoral.',
+    createdAt: isoDays(-1),
+  });
+
+  for (const r of activityRows) {
+    await db.insert(s.activities).values({
+      id: generateId(Prefixes.activity),
+      organizationId: orgId,
+      type: r.type,
+      subjectType: r.subjectType,
+      subjectId: r.subjectId,
+      actorId: userId,
+      title: r.title,
+      body: r.body ?? null,
+      createdAt: r.createdAt,
+    });
+  }
 
   // --- One email sender in fake/provider-safe mode (no creds, no sends) -
   await db.insert(s.emailSenders).values({

@@ -17,6 +17,7 @@ import { noteRoutes } from './modules/notes/routes.js';
 import { taskRoutes } from './modules/tasks/routes.js';
 import { customFieldRoutes } from './modules/custom-fields/routes.js';
 import { attentionRoutes } from './modules/attention/routes.js';
+import { activityRoutes } from './modules/activities/routes.js';
 import { searchRoutes } from './modules/search/routes.js';
 import { serviceKeyRoutes } from './modules/service-keys/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
@@ -97,6 +98,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await v1.register(noteRoutes, { prefix: '/api/v1' });
     await v1.register(taskRoutes, { prefix: '/api/v1' });
     await v1.register(customFieldRoutes, { prefix: '/api/v1' });
+    await v1.register(activityRoutes, { prefix: '/api/v1' });
     await v1.register(attentionRoutes, { prefix: '/api/v1' });
     await v1.register(searchRoutes, { prefix: '/api/v1' });
     await v1.register(serviceKeyRoutes, { prefix: '/api/v1' });

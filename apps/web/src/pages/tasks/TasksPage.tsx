@@ -9,8 +9,9 @@ import { EmptyState } from '../../components/design-system/EmptyState';
 import { Badge } from '../../components/design-system/Badge';
 import { useToast } from '../../components/design-system/Toast';
 import { formatDate } from '../../lib/format';
+import { PRIORITY_LABEL, label } from '../../lib/labels';
 
-interface Task {
+export interface Task {
   id: string;
   title: string;
   description: string | null;
@@ -49,66 +50,128 @@ export function TasksPage() {
   });
 
   return (
-    <div className="px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
+    <div className="px-4 sm:px-8 py-6 max-w-[1280px] mx-auto animate-fade-in">
       <header className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">Tareas</p>
-          <h1 className="text-2xl font-semibold text-ink-900 mt-1">{overdue ? 'Vencidas' : 'Todas'}</h1>
+          <h1 className="text-2xl font-semibold text-ink-900 mt-1">
+            {overdue ? 'Vencidas' : 'Todas'}
+          </h1>
         </div>
-        <Button variant="accent" onClick={() => setCreateOpen(true)}>Nueva tarea</Button>
+        <Button variant="accent" onClick={() => setCreateOpen(true)}>
+          Nueva tarea
+        </Button>
       </header>
 
       {isLoading && <p className="text-sm text-ink-500">Cargando…</p>}
       {data && data.items.length === 0 && (
         <EmptyState
           title="No hay tareas"
-          description={overdue ? 'Nada vencido. Buen trabajo.' : 'Crea la primera para empezar a organizarte.'}
-          action={<Button variant="accent" onClick={() => setCreateOpen(true)}>Crear tarea</Button>}
+          description={
+            overdue ? 'Nada vencido. Buen trabajo.' : 'Crea la primera para empezar a organizarte.'
+          }
+          action={
+            <Button variant="accent" onClick={() => setCreateOpen(true)}>
+              Crear tarea
+            </Button>
+          }
         />
       )}
 
       {data && data.items.length > 0 && (
-        <div className="card overflow-hidden">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Tarea</th>
-                <th>Vence</th>
-                <th>Prioridad</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <p className="text-sm text-ink-900">{t.title}</p>
-                    {t.description && <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>}
-                  </td>
-                  <td className="text-[12px] text-ink-600">{t.dueAt ? formatDate(t.dueAt) : '—'}</td>
-                  <td>
-                    {t.priority === 'urgent' ? <Badge tone="bad">Urgente</Badge>
-                      : t.priority === 'high' ? <Badge tone="warn">Alta</Badge>
-                      : <Badge tone="neutral">{t.priority}</Badge>}
-                  </td>
-                  <td>
-                    {t.status === 'done' ? <Badge tone="ok">Hecha</Badge>
-                      : t.status === 'cancelled' ? <Badge tone="neutral">Cancelada</Badge>
-                      : <Badge tone="lime">Abierta</Badge>}
-                  </td>
-                  <td className="text-right">
-                    {t.status !== 'done' && (
-                      <Button size="sm" variant="outline" onClick={() => update.mutate({ id: t.id, status: 'done' })}>
-                        Marcar hecha
-                      </Button>
-                    )}
-                  </td>
+        <>
+          <div className="card overflow-hidden hidden md:block">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Tarea</th>
+                  <th>Vence</th>
+                  <th>Prioridad</th>
+                  <th>Estado</th>
+                  <th className="w-32">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.items.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <p className="text-sm text-ink-900">{t.title}</p>
+                      {t.description && (
+                        <p className="text-[11px] text-ink-500 line-clamp-1">{t.description}</p>
+                      )}
+                    </td>
+                    <td className="text-[12px] text-ink-600">
+                      {t.dueAt ? formatDate(t.dueAt) : '—'}
+                    </td>
+                    <td>
+                      {t.priority === 'urgent' ? (
+                        <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : t.priority === 'high' ? (
+                        <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      ) : (
+                        <Badge tone="neutral">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                      )}
+                    </td>
+                    <td>
+                      {t.status === 'done' ? (
+                        <Badge tone="ok">Hecha</Badge>
+                      ) : t.status === 'cancelled' ? (
+                        <Badge tone="neutral">Cancelada</Badge>
+                      ) : (
+                        <Badge tone="lime">Abierta</Badge>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {t.status !== 'done' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => update.mutate({ id: t.id, status: 'done' })}
+                        >
+                          Marcar hecha
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: cards instead of an overflowing table. */}
+          <ul className="md:hidden space-y-2">
+            {data.items.map((t) => (
+              <li key={t.id} className="card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-ink-900">{t.title}</p>
+                  {t.status !== 'done' ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => update.mutate({ id: t.id, status: 'done' })}
+                    >
+                      Hecha
+                    </Button>
+                  ) : (
+                    <Badge tone="ok">Hecha</Badge>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-600">
+                  {t.dueAt && <span>Vence {formatDate(t.dueAt)}</span>}
+                  {t.priority === 'urgent' ? (
+                    <Badge tone="bad">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  ) : t.priority === 'high' ? (
+                    <Badge tone="warn">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  ) : (
+                    <Badge tone="neutral">{label(PRIORITY_LABEL, t.priority)}</Badge>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} />
@@ -116,7 +179,25 @@ export function TasksPage() {
   );
 }
 
-function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export interface CreateTaskModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialSubjectType?: Task['subjectType'];
+  initialSubjectId?: string;
+  /** Optional label rendered above the title input, e.g. "Vinculada a Acme Vertical 1 Test". */
+  subjectLabel?: string;
+  /** Extra query keys to invalidate on success (e.g. ['company-tasks', id]). */
+  extraInvalidateKeys?: ReadonlyArray<readonly unknown[]>;
+}
+
+export function CreateTaskModal({
+  open,
+  onClose,
+  initialSubjectType,
+  initialSubjectId,
+  subjectLabel,
+  extraInvalidateKeys,
+}: CreateTaskModalProps) {
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
@@ -128,31 +209,59 @@ function CreateTaskModal({ open, onClose }: { open: boolean; onClose: () => void
         title,
         dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
         priority,
+        ...(initialSubjectType ? { subjectType: initialSubjectType } : {}),
+        ...(initialSubjectId ? { subjectId: initialSubjectId } : {}),
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['attention'] });
+      for (const key of extraInvalidateKeys ?? []) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
       toast.push({ tone: 'ok', title: 'Tarea creada' });
       onClose();
-      setTitle(''); setDueAt('');
+      setTitle('');
+      setDueAt('');
     },
   });
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Nueva tarea"
+      title={subjectLabel ? `Nueva tarea · ${subjectLabel}` : 'Nueva tarea'}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="accent" onClick={() => create.mutate()} disabled={!title || create.isPending} loading={create.isPending}>Crear</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="accent"
+            onClick={() => create.mutate()}
+            disabled={!title || create.isPending}
+            loading={create.isPending}
+          >
+            Crear
+          </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label="Título"><Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /></Field>
+        {subjectLabel && (
+          <p className="text-[11px] uppercase tracking-wide text-ink-500 font-medium">
+            {subjectLabel}
+          </p>
+        )}
+        <Field label="Título">
+          <Input value={title} onChange={(e) => setTitle(e.target.value ?? '')} autoFocus />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Vencimiento"><Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} /></Field>
+          <Field label="Vencimiento">
+            <Input
+              type="datetime-local"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value ?? '')}
+            />
+          </Field>
           <Field label="Prioridad">
             <select
               value={priority}

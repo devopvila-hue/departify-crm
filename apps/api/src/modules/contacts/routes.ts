@@ -8,6 +8,7 @@ import { badRequest, notFound } from '../../errors.js';
 import { requireRole } from '../../tenants/plugin.js';
 import { audit } from '../../audit/log.js';
 import { recordActivity } from '../../activities/log.js';
+import { assertOwned } from '../../lib/ownership.js';
 import { config } from '../../config.js';
 
 const ContactCreate = z.object({
@@ -29,6 +30,7 @@ const ContactUpdate = ContactCreate.partial();
 const ContactList = z.object({
   ...PaginationQuery.shape,
   search: z.string().max(200).optional(),
+  companyId: z.string().max(64).optional(),
   filter: z.unknown().optional(),
   sort: z.enum(['created_at', 'updated_at', 'last_activity_at', 'full_name']).default('updated_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
@@ -68,6 +70,7 @@ export async function contactRoutes(app: FastifyInstance) {
     const filter = compileFilterFromBody(q.filter);
 
     const conds = [eq(schema.contacts.organizationId, tenant.organizationId)];
+    if (q.companyId) conds.push(eq(schema.contacts.companyId, q.companyId));
     if (q.search) {
       const s = `%${q.search}%`;
       conds.push(
@@ -107,14 +110,22 @@ export async function contactRoutes(app: FastifyInstance) {
       .where(where);
     const count = countRow[0]?.count ?? 0;
     const items = await tenant.db
-      .select()
+      .select({
+        contact: schema.contacts,
+        companyName: schema.companies.name,
+      })
       .from(schema.contacts)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.contacts.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(where)
       .orderBy(orderBy)
       .limit(q.pageSize)
       .offset(offset);
 
-    return paginate(items, count, q);
+    return paginate(
+      items.map((r) => ({ ...r.contact, companyName: r.companyName ?? null })),
+      count,
+      q,
+    );
   });
 
   app.post('/contacts', { preHandler: [requireRole('member')] }, async (req, reply) => {
@@ -122,9 +133,7 @@ export async function contactRoutes(app: FastifyInstance) {
     const parsed = ContactCreate.safeParse(req.body);
     if (!parsed.success) throw badRequest('Invalid contact body', { issues: parsed.error.flatten() });
     const body = parsed.data;
-    if (!body.email) {
-      // explicit undefined to satisfy optional column
-    }
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
     const id = generateId(Prefixes.contact);
     const now = new Date();
     await tenant.db.insert(schema.contacts).values({
@@ -158,19 +167,24 @@ export async function contactRoutes(app: FastifyInstance) {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const rows = await tenant.db
-      .select()
+      .select({
+        contact: schema.contacts,
+        companyName: schema.companies.name,
+      })
       .from(schema.contacts)
+      .leftJoin(schema.companies, and(eq(schema.companies.id, schema.contacts.companyId), eq(schema.companies.organizationId, tenant.organizationId)))
       .where(and(eq(schema.contacts.organizationId, tenant.organizationId), eq(schema.contacts.id, id)))
       .limit(1);
     const row = rows[0];
     if (!row) throw notFound('Contact not found');
-    return row;
+    return { ...row.contact, companyName: row.companyName ?? null };
   });
 
   app.patch('/contacts/:id', { preHandler: [requireRole('member')] }, async (req) => {
     const tenant = req.tenant!;
     const id = z.string().parse((req.params as { id: string }).id);
     const body = ContactUpdate.parse(req.body);
+    if (body.companyId) await assertOwned(tenant, 'company', body.companyId);
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     for (const [k, v] of Object.entries(body)) {
       if (v === undefined) continue;
