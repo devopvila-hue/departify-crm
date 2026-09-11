@@ -19,7 +19,7 @@ CREATE TYPE rosa_status AS ENUM (
 CREATE TABLE rosa_state (
   rosa_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   rosa_version TEXT NOT NULL DEFAULT '0.1',
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   work_id      UUID NOT NULL,
   objective    TEXT NOT NULL,
   state        rosa_status NOT NULL DEFAULT 'planned',
