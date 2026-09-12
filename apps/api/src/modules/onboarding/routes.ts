@@ -210,8 +210,8 @@ async function moveInternal(
       organizationId: orgId,
       phase,
       prepCards: current,
-      startedAt: sql`coalesce(${schema.onboardingPrep.startedAt}, now())`,
-      completedAt: phase === 'ready' ? sql`coalesce(${schema.onboardingPrep.completedAt}, now())` : sql`${schema.onboardingPrep.completedAt}`,
+      startedAt: new Date(),
+      completedAt: phase === 'ready' ? new Date() : null,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -314,10 +314,20 @@ export async function onboardingRoutes(app: FastifyInstance) {
       auditOk = false;
     }
 
+    // Reflect REAL grants too: if the org already has a Google/Microsoft
+    // grant, the corresponding optional cards are already 'ready' and
+    // /start must not clobber them back to 'available_later'.
+    const existingGrants = await db
+      .select({ provider: schema.externalGrants.provider })
+      .from(schema.externalGrants)
+      .where(eq(schema.externalGrants.organizationId, orgId));
+    const hasAnyGrant = existingGrants.length > 0;
+
     const cards: PrepCards = {
       ...deriveInitialCards(),
       company: orgRow.length > 0 && membershipRow.length > 0 && membershipRow[0]!.status === 'active' ? 'ready' : 'waiting',
       workspace: auditOk ? 'ready' : 'error',
+      ...(hasAnyGrant ? { drive: 'ready' as const, calendar: 'ready' as const, mail: 'ready' as const } : {}),
     };
     const phase = derivePhase(cards);
     const isNew = (
@@ -436,12 +446,14 @@ export async function onboardingRoutes(app: FastifyInstance) {
           organizationId: orgId,
           phase,
           prepCards: nextCards,
-          startedAt: sql`coalesce(${schema.onboardingPrep.startedAt}, now())`,
-          completedAt: phase === 'ready' ? sql`coalesce(${schema.onboardingPrep.completedAt}, now())` : sql`${schema.onboardingPrep.completedAt}`,
+          startedAt: new Date(),
+          completedAt: phase === 'ready' ? new Date() : null,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
           target: schema.onboardingPrep.organizationId,
+          // Deliberately do NOT touch started_at/completed_at here:
+          // they belong to /start and are preserved on conflict.
           set: {
             phase,
             prepCards: nextCards,

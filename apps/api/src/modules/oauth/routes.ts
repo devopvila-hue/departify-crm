@@ -39,7 +39,7 @@
  *   - Fake progress. The cards flip to 'ready' ONLY after a real grant.
  */
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import argon2 from 'argon2';
 import { schema, createDb } from '@departify-crm/db';
@@ -387,23 +387,32 @@ export async function oauthRoutes(app: FastifyInstance) {
     });
 
     // Record the grant as metadata. We never store tokens here.
-    await db
-      .insert(schema.externalGrants)
-      .values({
+    // NOTE: a select-then-update/insert instead of ON CONFLICT because
+    // external_grants has a plain INDEX on (organization_id, provider),
+    // NOT a UNIQUE constraint — ON CONFLICT requires one (42P10).
+    const existingGrant = await db
+      .select({ id: schema.externalGrants.id })
+      .from(schema.externalGrants)
+      .where(
+        and(
+          eq(schema.externalGrants.organizationId, orgId),
+          eq(schema.externalGrants.provider, params.provider),
+        ),
+      )
+      .limit(1);
+    if (existingGrant.length) {
+      await db
+        .update(schema.externalGrants)
+        .set({ lastSeenAt: new Date(), scopes: cfg.scopes as unknown as string[] })
+        .where(eq(schema.externalGrants.id, existingGrant[0]!.id));
+    } else {
+      await db.insert(schema.externalGrants).values({
         id: generateId(Prefixes.audit),
         organizationId: orgId,
         provider: params.provider,
         scopes: cfg.scopes as unknown as string[],
-      })
-      .onConflictDoUpdate({
-        target: [schema.externalGrants.organizationId, schema.externalGrants.provider],
-        set: { lastSeenAt: new Date(), scopes: cfg.scopes as unknown as string[] },
-      })
-      .catch((err: unknown) => {
-        // Fallback: no unique index on (org, provider)? Then plain insert.
-        const code = (err as { code?: string }).code;
-        if (code !== '23505') throw err;
       });
+    }
 
     // Mint the session.
     const sessionToken = randomToken(32);
