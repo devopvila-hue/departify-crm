@@ -1,27 +1,67 @@
 /**
- * Onboarding preparation — E2E over the real API + Postgres.
+ * DEPARTIFY CRM — onboarding preparation (E2E, real Postgres).
  *
- * Covers the zero-question flow:
- *   auth → start preparation → move cards → ready → durable refresh.
+ * Contract under test (P0.2 / P0.5):
+ *  - System-driven setup. Nothing in the UI ever advances card state.
+ *  - /start runs REAL setup work (org + membership + audit probe) and
+ *    persists the resulting card map. No fake delays, no fake progress.
+ *  - Company + Workspace start as 'waiting' and become 'ready' when the
+ *    backend's setup succeeds.
+ *  - Calendar / Mail / Drive are NOT built. They default to 'available_later'
+ *    and the UI must NOT be able to mark them 'ready' (no /move endpoint).
+ *  - readyForWork = Company AND Workspace ready. The UI hero line mirrors
+ *    that predicate, not "all connectors done".
+ *  - Refresh is safe: GET /onboarding returns the same shape and the
+ *    persisted state.
+ *  - Tenant isolation: another org cannot see the first org's prep.
  *
- * Follows the same conventions as contacts.test.ts (real server via
- * startTestApi, real Postgres via resetSchema, real signup/login).
+ * Pattern notes: a tiny `localRequest` helper bypasses the host's egress
+ * proxy (which would 502 plain localhost fetch); node:http with
+ * `agent: false` talks to the loopback directly, matching curl.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
-import { phaseFromCards } from '../src/modules/onboarding/routes.js';
 import { request } from 'node:http';
+import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
+import {
+  derivePhase,
+  isReadyForWork,
+  isAllConnectionsReady,
+  type PrepCards,
+} from '../src/modules/onboarding/routes.js';
 
-/**
- * Local HTTP helper: Node's global `fetch` inside this OpenClaw host is
- * routed through the secret egress proxy for ANY target (including
- * 127.0.0.1), which answers 502 for localhost. The existing suites use
- * `fetch`, which is why they fail in this environment. `node:http`
- * with `agent: false` talks to the loopback directly and matches what
- * curl does.
- */
-function localRequest(method: string, baseUrl: string, path: string, body?: unknown, cookie?: string): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; json: () => Promise<unknown> }> {
-  const { hostname, port } = new URL(baseUrl);
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:***@127.0.0.1:5433/departify_crm_test';
+
+let api: TestApi | null = null;
+let BASE_URL = '';
+
+beforeAll(async () => {
+  await resetSchema(DATABASE_URL);
+  api = await startTestApi(DATABASE_URL);
+  BASE_URL = api.baseUrl;
+}, 60_000);
+
+afterAll(async () => {
+  await api?.stop();
+});
+
+interface PrepResponse {
+  organizationId: string;
+  phase: string;
+  cards: PrepCards;
+  readyForWork: boolean;
+  allConnectionsReady: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+interface HttpResp {
+  status: number;
+  headers: Record<string, string | string[] | undefined>;
+  json: () => Promise<unknown>;
+}
+
+function localRequest(method: string, path: string, body?: unknown, cookie?: string): Promise<HttpResp> {
+  const { hostname, port } = new URL(BASE_URL);
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = request(
@@ -40,13 +80,13 @@ function localRequest(method: string, baseUrl: string, path: string, body?: unkn
       (res) => {
         let raw = '';
         res.on('data', (d) => (raw += d.toString()));
-        res.on('end', () => {
+        res.on('end', () =>
           resolve({
             status: res.statusCode ?? 0,
             headers: res.headers as Record<string, string | string[] | undefined>,
             json: async () => (raw ? JSON.parse(raw) : null),
-          });
-        });
+          }),
+        );
       },
     );
     req.setTimeout(10_000, () => reject(new Error('timeout')));
@@ -56,129 +96,167 @@ function localRequest(method: string, baseUrl: string, path: string, body?: unkn
   });
 }
 
-const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/departify_crm_test_2';
-
-let api: TestApi | null = null;
-let BASE_URL = '';
-
-beforeAll(async () => {
-  await resetSchema(DATABASE_URL);
-  api = await startTestApi(DATABASE_URL);
-  BASE_URL = api.baseUrl;
-}, 60_000);
-
-afterAll(async () => {
-  await api?.stop();
-});
-
-interface PrepResponse {
-  organizationId: string;
-  phase: string;
-  cards: Record<string, string>;
-  startedAt: string | null;
-  completedAt: string | null;
+async function signupAndLogin(email: string, password: string, org: string): Promise<string> {
+  const s = await localRequest('POST', '/api/v1/auth/signup', { email, password, displayName: 'Owner', organizationName: org });
+  if (s.status !== 201) throw new Error(`signup failed: ${s.status} ${JSON.stringify(await s.json())}`);
+  const l = await localRequest('POST', '/api/v1/auth/login', { email, password });
+  if (l.status !== 200) throw new Error(`login failed: ${l.status}`);
+  const sc = l.headers['set-cookie'];
+  const first = Array.isArray(sc) ? sc[0]! : sc!;
+  return first.split(';')[0]!;
 }
 
-async function signupAndLogin(email: string, password: string, org: string) {
-  const signup = await localRequest('POST', BASE_URL, '/api/v1/auth/signup', { email, password, displayName: 'Owner', organizationName: org });
-  if (signup.status !== 201) throw new Error(`signup failed: ${signup.status}`);
-  const login = await localRequest('POST', BASE_URL, '/api/v1/auth/login', { email, password });
-  if (login.status !== 200) throw new Error(`login failed: ${login.status}`);
-  return (Array.isArray(login.headers['set-cookie']) ? login.headers['set-cookie'][0]! : login.headers['set-cookie'])!.split(';')[0]!;
+function getOnboarding(cookie: string): Promise<PrepResponse> {
+  return localRequest('GET', '/api/v1/onboarding', undefined, cookie).then(async (r) => {
+    expect(r.status).toBe(200);
+    return (await r.json()) as PrepResponse;
+  });
 }
 
-function authed(cookie: string): Record<string, string> {
-  return { cookie };
+function startOnboarding(cookie: string): Promise<PrepResponse> {
+  return localRequest('POST', '/api/v1/onboarding/start', {}, cookie).then(async (r) => {
+    expect(r.status).toBe(200);
+    return (await r.json()) as PrepResponse;
+  });
 }
 
-// keep helper referenced for parity with other suites
-void authed;
-
-describe('onboarding preparation', () => {
+describe('onboarding — system-driven preparation (P0.2 / P0.5)', () => {
   let cookie: string;
   let orgId: string;
 
-  it('signs up and logs in', async () => {
-    cookie = await signupAndLogin('owner@onboarding.test', 'password-1234', 'Onboarding Org');
-    expect(cookie).toContain('sid=');
-    const me = await localRequest('GET', BASE_URL, '/api/v1/auth/me', undefined, cookie);
-    expect(me.status).toBe(200);
-    orgId = ((await me.json()) as { organizationId: string }).organizationId;
+  it('A. signs up and start runs real setup (Company+Workspace ready, no clicks)', async () => {
+    cookie = await signupAndLogin('owner.p02.a@onboarding.test', 'password-1234', 'Org A');
+
+    const before = await getOnboarding(cookie);
+    expect(before.phase).toBe('not_started');
+    expect(before.readyForWork).toBe(false);
+    expect(before.cards.company).toBe('waiting');
+    expect(before.cards.workspace).toBe('waiting');
+    expect(before.cards.calendar).toBe('available_later');
+    expect(before.cards.mail).toBe('available_later');
+    expect(before.cards.drive).toBe('available_later');
+
+    const started = await startOnboarding(cookie);
+    orgId = started.organizationId;
+    expect(orgId).toMatch(/^org_/);
+    expect(started.cards.company).toBe('ready');
+    expect(started.cards.workspace).toBe('ready');
+    expect(started.readyForWork).toBe(true);
+    expect(started.allConnectionsReady).toBe(true);
+    expect(started.phase).toBe('ready');
   });
 
-  it('returns a not_started state on first read (creates row)', async () => {
-    const res = await localRequest('GET', BASE_URL, '/api/v1/onboarding', undefined, cookie);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as PrepResponse;
-    expect(body.phase).toBe('not_started');
-    expect(body.startedAt).toBeNull();
+  it('B. optional cards stay available_later (no built integration)', async () => {
+    const state = await getOnboarding(cookie);
+    expect(state.cards.calendar).toBe('available_later');
+    expect(state.cards.mail).toBe('available_later');
+    expect(state.cards.drive).toBe('available_later');
   });
 
-  it('starts preparation idempotently', async () => {
-    const res = await localRequest('POST', BASE_URL, '/api/v1/onboarding/start', { cards: { company: 'preparing' } }, cookie);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as PrepResponse;
-    expect(body.phase).toBe('preparing');
-    expect(body.cards.company).toBe('preparing');
-    expect(body.startedAt).not.toBeNull();
-    const firstStartedAt = body.startedAt;
-
-    // Idempotent: second start keeps the original started_at.
-    const res2 = await localRequest('POST', BASE_URL, '/api/v1/onboarding/start', {}, cookie);
-    const body2 = (await res2.json()) as PrepResponse;
-    expect(body2.startedAt).toBe(firstStartedAt);
+  it('C. readyForWork is true once Company + Workspace are ready', async () => {
+    const state = await getOnboarding(cookie);
+    expect(state.readyForWork).toBe(true);
+    expect(state.cards.company).toBe('ready');
+    expect(state.cards.workspace).toBe('ready');
   });
 
-  it('moves cards and derives partial → ready → needs_attention', async () => {
-    // company ready (previous state: calendar preparing, others waiting) → partial
-    let res = await localRequest('POST', BASE_URL, '/api/v1/onboarding/move', { card: 'company', state: 'ready' }, cookie);
-    expect(res.status).toBe(200);
-    let body = (await res.json()) as PrepResponse;
-    expect(body.cards.company).toBe('ready');
-    expect(body.phase).toBe('ready'); // only company is set → all known cards ready
+  it('D. refresh is safe and idempotent — state persists exactly', async () => {
+    const before = await getOnboarding(cookie);
+    const again = await getOnboarding(cookie);
+    expect(again.organizationId).toBe(before.organizationId);
+    expect(again.phase).toBe(before.phase);
+    expect(again.cards).toEqual(before.cards);
+    expect(again.readyForWork).toBe(true);
+    expect(again.startedAt).toBe(before.startedAt);
+    expect(again.completedAt).toBe(before.completedAt);
 
-    // calendar ready → still only ready cards (all present ready) → ready
-    res = await localRequest('POST', BASE_URL, '/api/v1/onboarding/move', { card: 'calendar', state: 'ready' }, cookie);
-    body = (await res.json()) as PrepResponse;
-    expect(body.phase).toBe('ready');
-
-    // park the state at ready for the next step (error transitions later)
-    for (const card of ['mail', 'drive', 'workspace']) {
-      res = await localRequest('POST', BASE_URL, '/api/v1/onboarding/move', { card, state: 'ready' }, cookie);
-      body = (await res.json()) as PrepResponse;
-    }
-    expect(body.phase).toBe('ready');
-    expect(body.completedAt).not.toBeNull();
-
-    // error on one card → needs_attention, completed_at never lost
-    res = await localRequest('POST', BASE_URL, '/api/v1/onboarding/move', { card: 'drive', state: 'error' }, cookie);
-    body = (await res.json()) as PrepResponse;
-    expect(body.phase).toBe('needs_attention');
-    expect(body.completedAt).not.toBeNull();
+    const second = await startOnboarding(cookie);
+    expect(second.startedAt).toBe(before.startedAt);
+    expect(second.completedAt).toBe(before.completedAt);
   });
 
-  it('survives refresh (GET state matches last move)', async () => {
-    const res = await localRequest('GET', BASE_URL, '/api/v1/onboarding', undefined, cookie);
-    const body = (await res.json()) as PrepResponse;
-    expect(body.cards.drive).toBe('error');
-    expect(body.phase).toBe('needs_attention');
-    expect(body.organizationId).not.toBe(orgId); // never leaks another org
+  it('E. there is no POST /onboarding/move endpoint exposed to the UI', async () => {
+    const resp = await localRequest('POST', '/api/v1/onboarding/move', { card: 'calendar', state: 'ready' }, cookie);
+    expect(resp.status).toBe(404);
   });
 
-  it('is tenant-isolated (second org cannot see first org state)', async () => {
-    const cookie2 = await signupAndLogin('owner2@onboarding.test', 'password-1234', 'Onboarding Org B');
-    const res = await localRequest('GET', BASE_URL, '/api/v1/onboarding', undefined, cookie2);
-    const body = (await res.json()) as PrepResponse;
-    expect(body.phase).toBe('not_started');
-    expect(body.cards).toEqual({});
+  it('F. tenant isolation: a second org starts fresh and cannot see org A', async () => {
+    const cookie2 = await signupAndLogin('owner.p02.b@onboarding.test', 'password-1234', 'Org B');
+    const before = await getOnboarding(cookie2);
+    expect(before.phase).toBe('not_started');
+    expect(before.readyForWork).toBe(false);
+    expect(before.cards.company).toBe('waiting');
+    expect(before.cards.workspace).toBe('waiting');
+    expect(before.cards.calendar).toBe('available_later');
+
+    await startOnboarding(cookie2);
+    const aAfter = await getOnboarding(cookie);
+    const bAfter = await getOnboarding(cookie2);
+    expect(aAfter.organizationId).not.toBe(bAfter.organizationId);
+    expect(aAfter.phase).toBe('ready');
+    expect(bAfter.phase).toBe('ready');
   });
 });
 
-describe('phaseFromCards (unit)', () => {
-  it('maps empty → not_started', () => expect(phaseFromCards({})).toBe('not_started'));
-  it('maps all ready/skipped → ready', () => expect(phaseFromCards({ company: 'ready', calendar: 'skipped' })).toBe('ready'));
-  it('maps some ready → partial', () => expect(phaseFromCards({ company: 'ready', calendar: 'waiting' })).toBe('partial'));
-  it('maps error → needs_attention', () => expect(phaseFromCards({ company: 'error' })).toBe('needs_attention'));
-  it('maps needs_permission → needs_attention', () => expect(phaseFromCards({ calendar: 'needs_permission' })).toBe('needs_attention'));
-  it('maps in-flight → preparing', () => expect(phaseFromCards({ company: 'preparing' })).toBe('preparing'));
+describe('onboarding — predicate unit tests', () => {
+  it('isReadyForWork is true only when Company AND Workspace are ready', () => {
+    expect(isReadyForWork({ company: 'ready', workspace: 'ready' })).toBe(true);
+    expect(isReadyForWork({ company: 'ready', workspace: 'preparing' })).toBe(false);
+    expect(isReadyForWork({ company: 'waiting', workspace: 'ready' })).toBe(false);
+    expect(isReadyForWork({})).toBe(false);
+  });
+
+  it('isAllConnectionsReady tolerates available_later', () => {
+    expect(
+      isAllConnectionsReady({
+        company: 'ready',
+        workspace: 'ready',
+        calendar: 'available_later',
+        mail: 'available_later',
+        drive: 'available_later',
+      }),
+    ).toBe(true);
+  });
+
+  it('isAllConnectionsReady is false while a BUILT card is still preparing', () => {
+    expect(
+      isAllConnectionsReady({
+        company: 'ready',
+        workspace: 'preparing',
+        calendar: 'available_later',
+      }),
+    ).toBe(false);
+  });
+
+  it('derivePhase returns "needs_attention" if any card is in error/needs_permission', () => {
+    expect(
+      derivePhase({
+        company: 'ready',
+        workspace: 'ready',
+        calendar: 'needs_permission',
+      }),
+    ).toBe('needs_attention');
+  });
+
+  it('derivePhase returns "partial" when READY_FOR_WORK but a built card is preparing', () => {
+    expect(
+      derivePhase({
+        company: 'ready',
+        workspace: 'ready',
+        calendar: 'preparing',
+      }),
+    ).toBe('partial');
+  });
+
+  it('derivePhase returns "ready" when readyForWork AND allConnectionsReady', () => {
+    expect(
+      derivePhase({
+        company: 'ready',
+        workspace: 'ready',
+        calendar: 'available_later',
+        mail: 'available_later',
+        drive: 'available_later',
+      }),
+    ).toBe('ready');
+  });
 });
