@@ -76,7 +76,10 @@ export async function resetSchema(databaseUrl: string): Promise<void> {
   }
 }
 
-export async function startTestApi(databaseUrl: string): Promise<TestApi> {
+export async function startTestApi(
+  databaseUrl: string,
+  extraEnv: Record<string, string> = {},
+): Promise<TestApi> {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   // The repo's pnpm workspaces hoist binaries under the root
@@ -107,6 +110,7 @@ export async function startTestApi(databaseUrl: string): Promise<TestApi> {
       ENCRYPTION_KEY: 'b'.repeat(32),
       LOG_LEVEL: 'warn',
       RATE_LIMIT_DEFAULT_MAX: '10000',
+      ...extraEnv,
     },
     stdio: 'pipe',
   });

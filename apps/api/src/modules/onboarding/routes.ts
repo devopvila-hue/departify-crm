@@ -356,4 +356,116 @@ export async function onboardingRoutes(app: FastifyInstance) {
   // Exporting it here would couple the UI to a wizard control; we
   // explicitly do not.
   void moveInternal;
+
+  /**
+   * GET /api/v1/onboarding/capability-status
+   *
+   * Reflects REAL external grants (Google, Microsoft) into the prep_cards
+   * for the current organization. Idempotent. The UI calls this on entry
+   * to /onboarding and after an OAuth callback returns `?oauth=connected`.
+   *
+   * Mapping:
+   *   google    → drive (primary), calendar (Calendars.Read in Google =
+   *               Calendar API), mail (Gmail.Readonly)
+   *   microsoft → calendar (Calendars.Read), mail (Mail.Read), drive (Files.Read)
+   *
+   * Rules:
+   *   - A grant makes the corresponding card 'ready' only if the org's
+   *     grant row was inserted (not deleted). It never makes a card 'ready'
+   *     without a real grant.
+   *   - If the grant row exists but token-exchange is currently failing in
+   *     the background (this endpoint does NOT refresh tokens), we do not
+   *     downgrade state here — that decision is for a future background
+   *     worker. Today, presence == ready.
+   *   - This endpoint never destroys READY_FOR_WORK. It only flips the
+   *     capability cards; company/workspace are owned by /start.
+   *   - Returns the same shape as GET /onboarding so the UI can re-render
+   *     without a second round trip.
+   */
+  app.get('/onboarding/capability-status', async (req) => {
+    const tenant = req.tenant!;
+    const orgId = tenant.organizationId;
+    const db = tenant.db;
+
+    // 1. Read current state (creates an in-memory mirror if no row).
+    const existing = await db
+      .select()
+      .from(schema.onboardingPrep)
+      .where(eq(schema.onboardingPrep.organizationId, orgId))
+      .limit(1);
+
+    const currentCards: PrepCards = (existing[0]?.prepCards ?? deriveInitialCards()) as PrepCards;
+
+    // 2. Read REAL external grants for this org.
+    const grants = await db
+      .select({ provider: schema.externalGrants.provider, scopes: schema.externalGrants.scopes, lastSeenAt: schema.externalGrants.lastSeenAt })
+      .from(schema.externalGrants)
+      .where(eq(schema.externalGrants.organizationId, orgId));
+
+    const hasGoogle = grants.some((g) => g.provider === 'google');
+    const hasMicrosoft = grants.some((g) => g.provider === 'microsoft');
+    const hasAnyGoogle = hasGoogle;
+    const hasAnyMicrosoft = hasMicrosoft;
+
+    // 3. Derive capability cards. Only the cards whose providers have a
+    //    real grant row become 'ready'; otherwise stay as the initial
+    //    map (which is 'available_later' for calendar/mail/drive).
+    const nextCards: PrepCards = { ...currentCards };
+    // Drive: a real Google grant with drive.readonly OR a real Microsoft
+    // grant with Files.Read. Without inspecting scopes deeply, we trust
+    // the grant's existence because our OAuth start requests those scopes.
+    if (hasAnyGoogle || hasAnyMicrosoft) {
+      nextCards.drive = 'ready';
+    }
+    // Calendar: same idea. Both providers request calendar scopes on start.
+    if (hasAnyGoogle || hasAnyMicrosoft) {
+      nextCards.calendar = 'ready';
+    }
+    // Mail: Google gmail.readonly OR Microsoft Mail.Read.
+    if (hasAnyGoogle || hasAnyMicrosoft) {
+      nextCards.mail = 'ready';
+    }
+
+    // 4. Persist the new card map. We never touch company/workspace here:
+    //    those are owned by /start.
+    if (JSON.stringify(nextCards) !== JSON.stringify(currentCards)) {
+      const phase = derivePhase(nextCards);
+      await db
+        .insert(schema.onboardingPrep)
+        .values({
+          organizationId: orgId,
+          phase,
+          prepCards: nextCards,
+          startedAt: sql`coalesce(${schema.onboardingPrep.startedAt}, now())`,
+          completedAt: phase === 'ready' ? sql`coalesce(${schema.onboardingPrep.completedAt}, now())` : sql`${schema.onboardingPrep.completedAt}`,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: schema.onboardingPrep.organizationId,
+          set: {
+            phase,
+            prepCards: nextCards,
+            updatedAt: new Date(),
+          },
+        });
+      await audit(db, tenant, { action: 'update', resourceType: 'onboarding', metadata: { event: 'capability_status', providers: grants.map((g) => g.provider) } });
+    }
+
+    // 5. Return the latest row (or the synthesized initial map).
+    const after = await db
+      .select()
+      .from(schema.onboardingPrep)
+      .where(eq(schema.onboardingPrep.organizationId, orgId))
+      .limit(1);
+
+    if (after.length) return serialize(after[0]!);
+
+    return serialize({
+      organizationId: orgId,
+      phase: 'not_started',
+      prepCards: nextCards,
+      startedAt: null,
+      completedAt: null,
+    });
+  });
 }

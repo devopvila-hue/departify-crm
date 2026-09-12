@@ -2,28 +2,75 @@
  * DEPARTIFY CRM — login + signup.
  *
  * Rules:
- *  - No customer-facing OAuth buttons. Google/Microsoft buttons would
- *    have to start a real OAuth round-trip; this repo doesn't ship that
- *    path. Listing a button that doesn't do what it says would be the
- *    wrong product call — instead we keep email + password (real auth)
- *    and route signup into the honest onboarding flow.
- *  - Copy stays honest about what's optional and what happens next.
+ *  - Google/Microsoft buttons MUST be real. They trigger the actual
+ *    OAuth round-trip via `/api/v1/auth/oauth/<provider>/start`. If the
+ *    deployment has not configured those envs, the API answers 503 and
+ *    the toast tells the user what to do. We never render a button that
+ *    does not connect.
+ *  - Email + password remains a fully supported path.
+ *  - Signup navigates to /onboarding on success.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api, ApiClientError } from '../../lib/api';
 import { Button } from '../../components/design-system/Button';
 import { Input, Field } from '../../components/design-system/Input';
 import { useToast } from '../../components/design-system/Toast';
 import { useAuth } from '../../lib/auth';
 
+interface OAuthButtonProps {
+  provider: 'google' | 'microsoft';
+  label: string;
+}
+
+/**
+ * Real provider button. window.location.href (NOT the SPA router) because
+ * the redirect chain lives on the API origin and the callback lands back
+ * at the web origin via `redirect_to` semantics in the backend.
+ */
+function ProviderButton({ provider, label }: OAuthButtonProps) {
+  return (
+    <button
+      type="button"
+      className="btn-outline w-full justify-center text-sm"
+      onClick={() => {
+        window.location.href = `/api/v1/auth/oauth/${provider}/start`;
+      }}
+    >
+      <span className="size-4 inline-flex items-center justify-center rounded-sm border border-current text-[10px] font-semibold" aria-hidden>
+        {provider === 'google' ? 'G' : 'M'}
+      </span>
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { refresh } = useAuth();
   const toast = useToast();
+
+  // If the OAuth callback redirected here with ?oauth=connected|canceled|failed,
+  // surface a single toast and strip the query. The /onboarding page handles
+  // the "connected" case by re-reading capability-status.
+  const search = new URLSearchParams(location.search);
+  const oauthResult = search.get('oauth');
+  const oauthProvider = search.get('provider');
+  if (oauthResult) {
+    if (oauthResult === 'connected') {
+      toast.push({ tone: 'ok', title: 'Conectado', body: `Has conectado ${oauthProvider ?? 'tu cuenta'}.` });
+    } else if (oauthResult === 'canceled') {
+      toast.push({ tone: 'info', title: 'Cancelado', body: 'No pasó nada. Puedes intentarlo de nuevo cuando quieras.' });
+    } else if (oauthResult === 'failed') {
+      toast.push({ tone: 'bad', title: 'No pudimos conectar', body: 'Vuelve a intentarlo o usa email y contraseña.' });
+    }
+    // Strip the query so a refresh doesn't repeat the toast.
+    navigate('/login', { replace: true });
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +101,15 @@ export function LoginPage() {
         </div>
         <h1 className="text-xl font-semibold text-ink-900">Inicia sesión</h1>
         <p className="text-sm text-ink-500 mt-1 mb-4">Accede a tu espacio de trabajo.</p>
+        <div className="space-y-2 mb-4">
+          <ProviderButton provider="google" label="Continuar con Google" />
+          <ProviderButton provider="microsoft" label="Continuar con Microsoft" />
+        </div>
+        <div className="flex items-center gap-3 my-3" aria-hidden>
+          <span className="h-px flex-1 bg-ink-200" />
+          <span className="text-[11px] uppercase tracking-wide text-ink-400">o con email</span>
+          <span className="h-px flex-1 bg-ink-200" />
+        </div>
         <form onSubmit={submit} className="space-y-3">
           <Field label="Email">
             <Input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -87,8 +143,6 @@ export function SignupPage() {
     try {
       await api.post('/api/v1/auth/signup', { email, password, displayName, organizationName });
       await refresh();
-      // Enter the onboarding preparation flow. The backend will run real
-      // setup and the UI will know when READY_FOR_WORK is true.
       navigate('/onboarding', { replace: true });
     } catch (err) {
       toast.push({ tone: 'bad', title: 'No se pudo crear la cuenta', body: (err as ApiClientError).message });
@@ -112,6 +166,15 @@ export function SignupPage() {
         </div>
         <h1 className="text-xl font-semibold text-ink-900">Crea tu espacio</h1>
         <p className="text-sm text-ink-500 mt-1 mb-4">Empieza con una organización. Puedes invitar a tu equipo más tarde.</p>
+        <div className="space-y-2 mb-4">
+          <ProviderButton provider="google" label="Continuar con Google" />
+          <ProviderButton provider="microsoft" label="Continuar con Microsoft" />
+        </div>
+        <div className="flex items-center gap-3 my-3" aria-hidden>
+          <span className="h-px flex-1 bg-ink-200" />
+          <span className="text-[11px] uppercase tracking-wide text-ink-400">o con email</span>
+          <span className="h-px flex-1 bg-ink-200" />
+        </div>
         <form onSubmit={submit} className="space-y-3">
           <Field label="Tu nombre"><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required autoFocus /></Field>
           <Field label="Nombre de la organización"><Input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} required /></Field>

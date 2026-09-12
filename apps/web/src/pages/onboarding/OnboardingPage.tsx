@@ -15,7 +15,7 @@
  * can always navigate away and come back. There is NO wizard.
  */
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../components/design-system/Toast';
@@ -78,6 +78,7 @@ function toneClasses(tone: 'ok' | 'pending' | 'later' | 'attention'): string {
 
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { me } = useAuth();
   const toast = useToast();
   const [state, setState] = useState<PrepState | null>(null);
@@ -85,6 +86,34 @@ export function OnboardingPage() {
   const startedRef = useRef(false);
 
   const orgName = me?.orgName ?? 'Tu empresa';
+
+  // If we just landed here from an OAuth callback, reflect the result.
+  // capability-status re-reads real grants and flips the corresponding
+  // cards to 'ready'. We then strip the query so a refresh doesn't
+  // re-fire the side effect.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const oauthResult = params.get('oauth');
+    if (!oauthResult) return;
+    const provider = params.get('provider');
+    if (oauthResult === 'connected') {
+      toast.push({ tone: 'ok', title: 'Conectado', body: `Has conectado ${provider ?? 'tu cuenta'}.` });
+      (async () => {
+        try {
+          const refreshed = await api.get<PrepState>('/api/v1/onboarding/capability-status');
+          setState(refreshed);
+        } catch {
+          /* tolerate; fall back to next tick */
+        }
+      })();
+    } else if (oauthResult === 'canceled') {
+      toast.push({ tone: 'info', title: 'Cancelado', body: 'No pasó nada. Puedes intentarlo de nuevo cuando quieras.' });
+    } else if (oauthResult === 'failed') {
+      toast.push({ tone: 'bad', title: 'No pudimos conectar', body: 'Vuelve a intentarlo o usa email y contraseña.' });
+    }
+    navigate('/onboarding', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
