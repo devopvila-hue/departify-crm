@@ -19,6 +19,7 @@
  * proxy (which would 502 plain localhost fetch); node:http with
  * `agent: false` talks to the loopback directly, matching curl.
  */
+import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { request } from 'node:http';
 import { startTestApi, resetSchema, type TestApi } from './helpers/test-api.js';
@@ -29,7 +30,12 @@ import {
   type PrepCards,
 } from '../src/modules/onboarding/routes.js';
 
-const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:***@127.0.0.1:5433/departify_crm_test';
+// DATABASE_URL is loaded from apps/api/.env via the `dotenv/config` import
+// above. See oauth.test.ts for the rationale (sandbox masks env-passed URLs).
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error('DATABASE_URL is not set — apps/api/.env must point at the test DB.');
+}
 
 let api: TestApi | null = null;
 let BASE_URL = '';
