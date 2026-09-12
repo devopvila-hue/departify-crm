@@ -25,6 +25,17 @@ const schema = z.object({
   LLM_MODEL: z.string().default('MiniMax-M3'),
   LLM_TIMEOUT_MS: z.coerce.number().int().default(60_000),
   LLM_MAX_RETRIES: z.coerce.number().int().default(2),
+
+  // Sprint Customer Zero: OAuth providers for onboarding capabilities.
+  // When a provider's envs are not set, the corresponding /api/v1/auth/oauth/<provider>/start
+  // endpoint returns 503 with a precise message — no fake buttons in the UI.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  MICROSOFT_OAUTH_CLIENT_ID: z.string().optional(),
+  MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_OAUTH_TENANT_ID: z.string().default('common'),
+  MICROSOFT_OAUTH_REDIRECT_URI: z.string().url().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
