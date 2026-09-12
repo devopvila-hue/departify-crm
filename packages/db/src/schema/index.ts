@@ -1,6 +1,7 @@
 // Re-exports for drizzle-kit discovery and the API client.
 export * from './rosa.js';
 export * from './onboarding.js';
+export * from './grants.js';
 export * from './organizations.js';
 export * from './users.js';
 export * from './contacts.js';
