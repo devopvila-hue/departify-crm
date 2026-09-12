@@ -21,8 +21,28 @@ export const onboardingPhaseEnum = pgEnum('onboarding_phase', [
 
 export type OnboardingPhase = (typeof onboardingPhaseEnum.enumValues)[number];
 
-/** Per-capability preparation state, e.g. { company: 'ready', calendar: 'needs_permission' } */
-export type PrepCardState = 'waiting' | 'preparing' | 'ready' | 'needs_permission' | 'skipped' | 'error';
+/**
+ * Per-capability preparation state.
+ *
+ * Honest semantics:
+ *  - 'waiting'      → real work not yet started
+ *  - 'preparing'    → real work in flight (UI may display a spinner; backend owns the move)
+ *  - 'ready'        → REAL work completed by the system; user has not opted into this state
+ *  - 'needs_permission' → REAL work requires an OAuth grant the user hasn't given yet
+ *  - 'available_later' → REAL work does not exist in this deployment yet (capability not built)
+ *  - 'skipped'      → user (or product rule) explicitly chose not to do this now
+ *  - 'error'        → REAL work failed; will be retried out of band
+ *
+ * The UI never transitions any of these. Only backend operations do.
+ */
+export type PrepCardState =
+  | 'waiting'
+  | 'preparing'
+  | 'ready'
+  | 'needs_permission'
+  | 'available_later'
+  | 'skipped'
+  | 'error';
 
 export const onboardingPrep = pgTable(
   'onboarding_prep',
