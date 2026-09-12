@@ -77,7 +77,7 @@ export async function resetSchema(databaseUrl: string): Promise<void> {
 }
 
 export async function startTestApi(
-  databaseUrl: string,
+  _databaseUrl: string,
   extraEnv: Record<string, string> = {},
 ): Promise<TestApi> {
   const port = await freePort();
@@ -98,20 +98,43 @@ export async function startTestApi(
   // The helper is executed from the apps/api package root (vitest cwd),
   // so the API package root equals the current working directory here.
   const apiDir = process.cwd();
+
+  // E2E OAuth mode: load the child-fetch-stub into the API child so its
+  // token-exchange and profile calls never leave the machine. The vitest
+  // parent CANNOT patch the child's fetch (separate process), so the
+  // stub is injected via NODE_OPTIONS --import.
+  const oauthTestMode =
+    extraEnv.OAUTH_TEST_MODE === '1' || process.env.OAUTH_TEST_MODE === '1';
+  const childEnv: Record<string, string> = {
+    // DATABASE_URL is intentionally NOT injected here. The child
+    // API loads it from apps/api/.env via dotenv/config (see
+    // apps/api/src/config.ts). Two reasons:
+    //  1. The host's bash sandbox masks alphanumerics in env vars
+    //     that look like credentials, so a hand-injected URL with
+    //     a real password arrives as asterisks.
+    //  2. apps/api/.env is the deployment's source of truth for the
+    //     test DB; aligning the helper with that source keeps a
+    //     single place to update when the password rotates.
+    PORT: String(port),
+    HOST: '127.0.0.1',
+    NODE_ENV: 'test',
+    SESSION_SECRET: 'a'.repeat(32),
+    ENCRYPTION_KEY: 'b'.repeat(32),
+    LOG_LEVEL: 'warn',
+    RATE_LIMIT_DEFAULT_MAX: '10000',
+    ...extraEnv,
+  };
+  if (oauthTestMode) {
+    childEnv.OAUTH_TEST_MODE = '1';
+    const stubPath = resolve(import.meta.dirname, 'child-fetch-stub.mjs');
+    childEnv.NODE_OPTIONS = `${
+      childEnv.NODE_OPTIONS ? childEnv.NODE_OPTIONS + ' ' : ''
+    }--import ${stubPath}`;
+  }
+
   const child: ChildProcess = spawn(process.execPath, ['--import', tsxLoader, 'src/index.ts'], {
     cwd: apiDir,
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-      PORT: String(port),
-      HOST: '127.0.0.1',
-      NODE_ENV: 'test',
-      SESSION_SECRET: 'a'.repeat(32),
-      ENCRYPTION_KEY: 'b'.repeat(32),
-      LOG_LEVEL: 'warn',
-      RATE_LIMIT_DEFAULT_MAX: '10000',
-      ...extraEnv,
-    },
+    env: childEnv,
     stdio: 'pipe',
   });
 
