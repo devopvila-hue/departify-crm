@@ -14,6 +14,8 @@ export const externalGrants = pgTable(
     id: text('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     provider: text('provider').notNull(),
+    /** Google/Microsoft account email that completed the grant. Used for display. */
+    providerEmail: text('provider_email'),
     scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),

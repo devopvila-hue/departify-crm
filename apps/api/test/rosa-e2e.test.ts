@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import { createDb } from '@departify-crm/db';
 import { config } from '../src/config.js';
 import { RosaService, RosaConflictError } from '../src/rosa/service.js';
+import { resetSchema } from './helpers/test-api.js';
 
 const db = createDb(config.DATABASE_URL);
 const rosa = new RosaService(db);
@@ -28,6 +29,12 @@ async function cleanupRosa(orgId: string): Promise<void> {
 }
 
 beforeAll(async () => {
+  // Apply all checked-in migrations to the (fresh) test database so the
+  // rosa_state table (and rosa_status enum) exist before the E2E tests
+  // try to use them. CI provisions a fresh Postgres per run and does
+  // not apply migrations — without this, rosa-e2e fails with
+  // "relation rosa_state does not exist".
+  await resetSchema(config.DATABASE_URL);
   // Ensure test orgs exist (referenced by FK from rosa_state).
   await db.execute(sql`
     INSERT INTO organizations (id, name, slug, created_at, updated_at)
