@@ -1,219 +1,227 @@
 /**
- * DEPARTIFY — onboarding preparation experience.
+ * DEPARTIFY CRM — onboarding page (PURE DISPLAY of system state).
  *
- * Zero-question flow:
- *   auth → "Departify está preparando tu empresa" → work cards
- *   → [Empresa] está lista → Entrar en Departify
+ * Rules:
+ *  - Cards are display only. No handler that calls /onboarding/move.
+ *  - Backend state drives everything. UI never mutates prep cards.
+ *  - "readyForWork" decides when the hero line says "[Empresa] está lista".
+ *  - Optional cards (Calendar/Mail/Drive) are honest "available_later" —
+ *    never pretended ready.
+ *  - No "no cierres esta ventana". No spinner that traps the user.
+ *  - Refresh / re-entry is safe: re-fetches the state and renders.
  *
- * Every card derives from the real onboarding_prep state served by
- * /api/v1/onboarding. No fake timers, no fake percentages: the phase and
- * the card states ARE the progress. If a capability isn't connected yet
- * the user simply sees "Lo terminaremos después" — completion is never
- * blocked by optional connections.
+ * The page is allowed to refresh data periodically so the user can see
+ * real backend transitions (e.g. a real connection finishing). The user
+ * can always navigate away and come back. There is NO wizard.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Button } from '../../components/design-system/Button';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../components/design-system/Toast';
 
-type Phase = 'not_started' | 'preparing' | 'ready' | 'partial' | 'needs_attention';
-type CardState = 'waiting' | 'preparing' | 'ready' | 'needs_permission' | 'skipped' | 'error';
+type CardKey = 'company' | 'workspace' | 'calendar' | 'mail' | 'drive';
+type CardState = 'waiting' | 'preparing' | 'ready' | 'needs_permission' | 'available_later' | 'skipped' | 'error';
 
 interface PrepState {
   organizationId: string;
-  phase: Phase;
-  cards: Record<string, CardState>;
+  phase: string;
+  cards: Partial<Record<CardKey, CardState>>;
+  readyForWork: boolean;
+  allConnectionsReady: boolean;
   startedAt: string | null;
   completedAt: string | null;
 }
 
-const CARD_LABELS: Record<string, string> = {
+const CARD_LABELS: Record<CardKey, string> = {
   company: 'Empresa',
+  workspace: 'Tu espacio de trabajo',
   calendar: 'Calendario',
   mail: 'Correo',
   drive: 'Documentos',
-  workspace: 'Tu espacio de trabajo',
 };
 
-const CARD_DESC: Record<string, string> = {
+const CARD_HINTS: Record<CardKey, string> = {
   company: 'Tu organización y la forma de trabajar',
-  calendar: 'Tu tiempo y tus reuniones',
+  workspace: 'El espacio donde trabajas cada día',
+  calendar: 'Tus reuniones y tu tiempo',
   mail: 'Tus correos y tus bandejas',
   drive: 'Tus documentos y archivos',
-  workspace: 'El espacio donde trabajas cada día',
 };
 
-function stateCopy(state: CardState): string {
-  switch (state) {
-    case 'preparing': return 'Preparando…';
-    case 'ready': return 'Listo';
-    case 'needs_permission': return 'Esperando tu permiso…';
-    case 'skipped': return 'Lo terminaremos después';
-    case 'error': return 'Lo revisaremos más tarde';
-    default: return 'En cola…';
+/** Honest copy for each card state. No fake "preparing… puede tardar". */
+const CARD_COPY: Record<CardState, { line: string; tone: 'ok' | 'pending' | 'later' | 'attention' }> = {
+  ready: { line: 'Lista', tone: 'ok' },
+  preparing: { line: 'Preparando…', tone: 'pending' },
+  waiting: { line: 'En cola…', tone: 'pending' },
+  needs_permission: { line: 'Necesita tu permiso para continuar', tone: 'attention' },
+  available_later: { line: 'Puedes conectarlo después', tone: 'later' },
+  skipped: { line: 'Lo dejamos para más adelante', tone: 'later' },
+  error: { line: 'Lo revisaremos más tarde', tone: 'attention' },
+};
+
+/** Visual order is: built capabilities first, optionals after. */
+const CARD_ORDER: CardKey[] = ['company', 'workspace', 'calendar', 'mail', 'drive'];
+
+function toneClasses(tone: 'ok' | 'pending' | 'later' | 'attention'): string {
+  switch (tone) {
+    case 'ok':
+      return 'bg-lime-100 text-lime-700';
+    case 'attention':
+      return 'bg-amber-100 text-amber-800';
+    case 'later':
+      return 'bg-ink-100 text-ink-500';
+    default:
+      return 'bg-ink-100 text-ink-600';
   }
 }
-
-const PHASE_COPY: Record<Phase, { title: string; body: string }> = {
-  not_started: { title: 'Preparando tu empresa', body: 'Estoy preparando Departify para tu empresa. Tú no tienes que configurar nada.' },
-  preparing: { title: 'Preparando tu empresa', body: 'Estoy preparando Departify para tu empresa. Tú no tienes que configurar nada.' },
-  ready: { title: 'está lista', body: 'Ya puedes trabajar con Departify. Conecta lo que quieras cuando quieras.' },
-  partial: { title: 'está casi lista', body: 'Ya puedes entrar. Conecta lo que quieras cuando quieras.' },
-  needs_attention: { title: 'está casi lista', body: 'Algo necesita tu atención, pero puedes entrar y seguir trabajando.' },
-};
 
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { me } = useAuth();
   const toast = useToast();
-  const [prep, setPrep] = useState<PrepState | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<PrepState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const startedRef = useRef(false);
 
   const orgName = me?.orgName ?? 'Tu empresa';
 
-  const load = async () => {
-    try {
-      const state = await api.get<PrepState>('/api/v1/onboarding');
-      setPrep(state);
-      if (state.phase === 'not_started') {
-        // Begin real preparation: record the company card as preparing.
-        const started = await api.post<PrepState>('/api/v1/onboarding/start', { cards: { company: 'preparing' } });
-        setPrep(started);
-      }
-    } catch {
-      toast.push({ tone: 'bad', title: 'No se pudo cargar la preparación' });
-    }
-  };
-
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function tick(): Promise<void> {
+      try {
+        const next = await api.get<PrepState>('/api/v1/onboarding');
+        if (cancelled) return;
+        setState(next);
+
+        // If the backend is preparing something in real time, poll until
+        // it settles. We only poll while a BUILT capability is preparing
+        // (not for `available_later`, which is terminal).
+        const anyBuiltPreparing = Object.entries(next.cards).some(
+          ([, v]) => v === 'preparing' || v === 'waiting',
+        );
+        if (anyBuiltPreparing && startedRef.current === false) {
+          // Run real setup exactly once per mount, then poll.
+          startedRef.current = true;
+          try {
+            const started = await api.post<PrepState>('/api/v1/onboarding/start', {});
+            if (!cancelled) setState(started);
+          } catch {
+            /* tolerate; tick again to retry */
+          }
+          timer = setTimeout(() => void tick(), 1500);
+          return;
+        }
+        if (anyBuiltPreparing) {
+          timer = setTimeout(() => void tick(), 2000);
+          return;
+        }
+      } catch {
+        if (!cancelled) {
+          toast.push({ tone: 'bad', title: 'No se pudo cargar la preparación' });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const enter = async () => {
-    setBusy(true);
-    if (prep && (prep.phase === 'not_started' || prep.phase === 'preparing')) {
-      try {
-        // Duplicate-safety: if nothing moved, mark company ready so the
-        // user is never trapped in "preparing" forever.
-        await api.post<PrepState>('/api/v1/onboarding/move', { card: 'company', state: 'ready' });
-      } catch {
-        /* fallthrough: entering is never blocked */
-      }
-    }
-    navigate('/', { replace: true });
-  };
-
-  const phase = prep?.phase ?? 'preparing';
-  const copy = PHASE_COPY[phase];
-  const cards = prep?.cards ?? {};
-  const cardEntries = Object.keys(CARD_LABELS).map((key) => [key, cards[key] ?? 'waiting'] as const);
-  const ready = phase === 'ready' || phase === 'partial' || phase === 'needs_attention';
+  const readyForWork = state?.readyForWork === true;
+  const phase = state?.phase ?? 'preparing';
 
   return (
-    <div className="min-h-dvh grid place-items-center bg-ink-50 px-4 py-10">
-      <div className="w-full max-w-xl animate-fade-in">
-        <header className="text-center mb-8">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-lime-100 text-lime-700">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-              <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" strokeLinecap="round" />
-              <circle cx="12" cy="12" r="3.5" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink-900 md:text-3xl">
-            {ready ? (
+    <div className="min-h-dvh bg-ink-50">
+      <div className="mx-auto max-w-xl px-4 py-10 animate-fade-in">
+        <header className="mb-6">
+          <p className="text-[11px] uppercase tracking-wide font-medium text-ink-500">Onboarding</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 md:text-3xl">
+            {readyForWork ? (
               <>
-                {orgName} <span className="text-lime-600">{copy.title}</span>
+                {orgName} <span className="text-lime-600">está lista</span>
               </>
             ) : (
-              copy.title
+              <>Estoy preparando {orgName}</>
             )}
           </h1>
-          <p className="mt-2 text-sm text-ink-500">{copy.body}</p>
-          {!ready && (
-            <p className="mt-3 text-[12px] text-ink-400" aria-live="polite">
-              Esto puede tardar unos segundos. No cierres esta ventana.
-            </p>
-          )}
+          <p className="mt-2 text-sm text-ink-500">
+            {readyForWork
+              ? 'Ya puedes trabajar con Departify. Conecta lo que quieras cuando quieras.'
+              : 'Yo me encargo. Puedes seguir y volver cuando quieras.'}
+          </p>
         </header>
 
-        <div className="space-y-3">
-          {cardEntries.map(([key, state]) => (
-            <div
-              key={key}
-              className="card flex items-center gap-4 px-5 py-4"
-              data-state={state}
-            >
+        <div className="space-y-3" role="list" aria-busy={loading ? 'true' : 'false'}>
+          {CARD_ORDER.map((key) => {
+            const cardState: CardState = state?.cards[key] ?? 'waiting';
+            const copy = CARD_COPY[cardState];
+            const hint = CARD_HINTS[key];
+            return (
               <div
-                className={`grid size-9 shrink-0 place-items-center rounded-full ${
-                  state === 'ready'
-                    ? 'bg-lime-100 text-lime-700'
-                    : state === 'error' || state === 'needs_permission'
-                      ? 'bg-signal-warn/10 text-signal-warn'
-                      : state === 'preparing'
-                        ? 'bg-ink-100 text-ink-600'
-                        : 'bg-ink-50 text-ink-300'
-                }`}
-                aria-hidden
+                key={key}
+                role="listitem"
+                className="card flex items-start gap-4 px-5 py-4"
+                data-state={cardState}
+                aria-label={`${CARD_LABELS[key]}: ${copy.line}`}
               >
-                {state === 'ready' ? (
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 12l5 5L20 6" />
-                  </svg>
-                ) : state === 'preparing' ? (
-                  <span className="inline-block size-3 rounded-full border-2 border-current border-r-transparent animate-spin" />
-                ) : (
-                  <span className="inline-block size-2 rounded-full bg-current" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink-900">{CARD_LABELS[key]}</p>
-                <p className="text-[12px] text-ink-500">{CARD_DESC[key]}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p
-                  className={`text-[12px] font-medium ${
-                    state === 'ready'
-                      ? 'text-lime-700'
-                      : state === 'error' || state === 'needs_permission'
-                        ? 'text-signal-warn'
-                        : state === 'preparing'
-                          ? 'text-ink-600'
-                          : 'text-ink-400'
-                  }`}
+                <div
+                  className={`grid size-9 shrink-0 place-items-center rounded-full ${toneClasses(copy.tone)}`}
+                  aria-hidden
                 >
-                  {stateCopy(state)}
-                </p>
+                  {cardState === 'ready' ? (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 12l5 5L20 6" />
+                    </svg>
+                  ) : cardState === 'preparing' ? (
+                    <span className="inline-block size-3 rounded-full border-2 border-current border-r-transparent animate-spin" />
+                  ) : (
+                    <span className="inline-block size-2 rounded-full bg-current" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink-900">{CARD_LABELS[key]}</p>
+                  <p className="mt-0.5 text-[12px] text-ink-500">{hint}</p>
+                </div>
+                <div className="shrink-0">
+                  <p className={`text-[12px] font-medium ${copy.tone === 'ok' ? 'text-lime-700' : copy.tone === 'attention' ? 'text-amber-700' : copy.tone === 'later' ? 'text-ink-500' : 'text-ink-600'}`}>
+                    {copy.line}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {ready && (
-          <div className="mt-8 text-center animate-fade-in">
-            <Button variant="accent" size="lg" className="w-full sm:w-auto sm:px-10" onClick={enter} loading={busy}>
+        <div className="mt-8 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            className="text-[12px] text-ink-500 hover:text-ink-700"
+            onClick={() => navigate('/', { replace: true })}
+          >
+            Seguir sin esperar
+          </button>
+          {readyForWork ? (
+            <button
+              type="button"
+              className="btn-accent"
+              onClick={() => navigate('/', { replace: true })}
+            >
               Entrar en Departify
-            </Button>
-            {phase !== 'ready' && (
-              <p className="mt-3 text-[12px] text-ink-400">
-                Las conexiones que falten las completaremos después.
-              </p>
-            )}
-          </div>
-        )}
-
-        {!ready && (
-          <div className="mt-8 text-center">
-            <Button variant="ghost" size="md" onClick={enter} loading={busy}>
-              Entrar de todas formas
-            </Button>
-            <p className="mt-2 text-[11px] text-ink-400">
-              No estás obligado a esperar: puedes entrar y preparar el resto después.
-            </p>
-          </div>
-        )}
+            </button>
+          ) : (
+            <span className="text-[12px] text-ink-400" data-phase={phase}>
+              {state ? '' : 'Cargando…'}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

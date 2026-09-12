@@ -1,3 +1,14 @@
+/**
+ * DEPARTIFY CRM — login + signup.
+ *
+ * Rules:
+ *  - No customer-facing OAuth buttons. Google/Microsoft buttons would
+ *    have to start a real OAuth round-trip; this repo doesn't ship that
+ *    path. Listing a button that doesn't do what it says would be the
+ *    wrong product call — instead we keep email + password (real auth)
+ *    and route signup into the honest onboarding flow.
+ *  - Copy stays honest about what's optional and what happens next.
+ */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '../../lib/api';
@@ -5,40 +16,6 @@ import { Button } from '../../components/design-system/Button';
 import { Input, Field } from '../../components/design-system/Input';
 import { useToast } from '../../components/design-system/Toast';
 import { useAuth } from '../../lib/auth';
-
-/**
- * Customer-facing provider buttons. DEPARTIFY presents ONE choice
- * (Google / Microsoft) and orchestrates whatever the underlying
- * capabilities need. No OAuth credentials exist yet, so the button
- * routes through the normal email/password flow for now; the contract
- * for the future provider flow lives in the onboarding copy ("conectarás"),
- * never fabricating a finished connection.
- */
-function ProviderButton({ label, sub, tone }: { label: string; sub: string; tone: 'google' | 'microsoft' }) {
-  return (
-    <button
-      type="button"
-      className="btn-outline w-full justify-center text-sm"
-      onClick={() => {
-        /* provider flow placeholder — document handled in onboarding */
-      }}
-    >
-      <span className="size-4" aria-hidden>{tone === 'google' ? 'G' : '⊞'}</span>
-      <span className="font-medium">{label}</span>
-      <span className="sr-only">{sub}</span>
-    </button>
-  );
-}
-
-function Divider() {
-  return (
-    <div className="flex items-center gap-3 my-4" aria-hidden>
-      <span className="h-px flex-1 bg-ink-200" />
-      <span className="text-[11px] uppercase tracking-wide text-ink-400">o con email</span>
-      <span className="h-px flex-1 bg-ink-200" />
-    </div>
-  );
-}
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -77,11 +54,6 @@ export function LoginPage() {
         </div>
         <h1 className="text-xl font-semibold text-ink-900">Inicia sesión</h1>
         <p className="text-sm text-ink-500 mt-1 mb-4">Accede a tu espacio de trabajo.</p>
-        <div className="space-y-2">
-          <ProviderButton label="Continuar con Google" sub="Usa tu cuenta de Google" tone="google" />
-          <ProviderButton label="Continuar con Microsoft" sub="Usa tu cuenta de Microsoft" tone="microsoft" />
-        </div>
-        <Divider />
         <form onSubmit={submit} className="space-y-3">
           <Field label="Email">
             <Input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -93,9 +65,6 @@ export function LoginPage() {
         </form>
         <p className="text-[12px] text-ink-500 mt-4">
           ¿Aún no tienes cuenta? <Link to="/signup" className="text-ink-800 hover:underline">Crear organización</Link>
-        </p>
-        <p className="text-[11px] text-ink-400 mt-4">
-          Al continuar, Departify empieza a preparar tu empresa. Conectar tus herramientas es opcional y puedes hacerlo después.
         </p>
       </div>
     </div>
@@ -118,7 +87,9 @@ export function SignupPage() {
     try {
       await api.post('/api/v1/auth/signup', { email, password, displayName, organizationName });
       await refresh();
-      navigate('/');
+      // Enter the onboarding preparation flow. The backend will run real
+      // setup and the UI will know when READY_FOR_WORK is true.
+      navigate('/onboarding', { replace: true });
     } catch (err) {
       toast.push({ tone: 'bad', title: 'No se pudo crear la cuenta', body: (err as ApiClientError).message });
     } finally {
@@ -150,6 +121,9 @@ export function SignupPage() {
         </form>
         <p className="text-[12px] text-ink-500 mt-4">
           ¿Ya tienes cuenta? <Link to="/login" className="text-ink-800 hover:underline">Inicia sesión</Link>
+        </p>
+        <p className="text-[11px] text-ink-400 mt-4">
+          Al crear el espacio, Departify empieza a preparar tu organización. Conectar otras herramientas es opcional y puedes hacerlo después.
         </p>
       </div>
     </div>
